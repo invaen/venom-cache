@@ -4,10 +4,14 @@ Provides professional terminal output with ANSI colors, respecting the NO_COLOR
 standard and providing JSON/quiet mode infrastructure.
 """
 
+import json
 import os
 import sys
+import time
+from dataclasses import asdict, is_dataclass
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict
+from typing import Any, Dict, List, Optional
 
 
 class OutputMode(Enum):
@@ -68,6 +72,10 @@ class Output:
         self.verbosity = verbosity
         self._color_enabled = self._detect_color_support(force_color)
         self._enable_windows_ansi()
+        # Finding collection for JSON output
+        self._findings: List[Dict[str, Any]] = []
+        self._metadata: Dict[str, Any] = {}
+        self._start_time: float = time.time()
 
     def _detect_color_support(self, force_color: bool) -> bool:
         """Detect whether color output should be enabled.
@@ -160,3 +168,114 @@ class Output:
             return label
 
         return f"{color_code}{label}{RESET}"
+
+    def info(self, message: str) -> None:
+        """Print informational message.
+
+        Skipped in QUIET and JSON modes.
+
+        Args:
+            message: The message to print.
+        """
+        if self.mode in (OutputMode.QUIET, OutputMode.JSON):
+            return
+        print(message)
+
+    def status(self, message: str) -> None:
+        """Print status update message.
+
+        Skipped in QUIET and JSON modes.
+
+        Args:
+            message: The status message to print.
+        """
+        if self.mode in (OutputMode.QUIET, OutputMode.JSON):
+            return
+        print(message)
+
+    def success(self, message: str) -> None:
+        """Print success message.
+
+        Skipped in QUIET and JSON modes.
+
+        Args:
+            message: The success message to print.
+        """
+        if self.mode in (OutputMode.QUIET, OutputMode.JSON):
+            return
+        print(message)
+
+    def error(self, message: str) -> None:
+        """Print error message to stderr.
+
+        Always printed regardless of mode.
+
+        Args:
+            message: The error message to print.
+        """
+        print(message, file=sys.stderr)
+
+    def debug(self, message: str, level: int = 1) -> None:
+        """Print debug message to stderr if verbosity is high enough.
+
+        Args:
+            message: The debug message to print.
+            level: Minimum verbosity level required (default 1).
+        """
+        if self.verbosity >= level:
+            print(message, file=sys.stderr)
+
+    def section(self, title: str) -> None:
+        """Print section header.
+
+        Skipped in QUIET and JSON modes.
+
+        Args:
+            title: The section title to print.
+        """
+        if self.mode in (OutputMode.QUIET, OutputMode.JSON):
+            return
+        print(f"\n=== {title} ===")
+
+    def summary(self, text: str) -> None:
+        """Print summary line.
+
+        Skipped in QUIET and JSON modes.
+
+        Args:
+            text: The summary text to print.
+        """
+        if self.mode in (OutputMode.QUIET, OutputMode.JSON):
+            return
+        print(text)
+
+    def finding(
+        self,
+        finding_type: str,
+        name: str,
+        severity: Severity,
+        details: str,
+        extra: dict = None,
+    ) -> None:
+        """Print a vulnerability finding.
+
+        In NORMAL mode: Print formatted finding with colored severity label.
+        In QUIET mode: Print finding (quiet shows ONLY findings).
+        In JSON mode: Skip (findings collected via add_finding()).
+
+        Args:
+            finding_type: Type of finding (e.g., "Header Poisoning").
+            name: Name of the vulnerable element (e.g., header name).
+            severity: Severity level of the finding.
+            details: Description of the finding.
+            extra: Optional dict of additional key-value pairs to display.
+        """
+        if self.mode == OutputMode.JSON:
+            return
+
+        severity_label = self.format_severity(severity)
+        print(f"{severity_label} {finding_type}: {name}")
+        print(f"    {details}")
+        if extra:
+            for key, value in extra.items():
+                print(f"    {key}: {value}")
