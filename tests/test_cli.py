@@ -442,6 +442,12 @@ class TestJsonModeCLI:
         args = parser.parse_args(["--json", "https://example.com"])
         assert args.json is True
 
+    def test_json_short_flag(self):
+        """The -j short flag should set json=True."""
+        parser = build_parser()
+        args = parser.parse_args(["-j", "https://example.com"])
+        assert args.json is True
+
     def test_json_default_false(self):
         """JSON should default to False."""
         parser = build_parser()
@@ -460,3 +466,178 @@ class TestJsonModeCLI:
         parser = build_parser()
         help_text = parser.format_help()
         assert "--json" in help_text
+        assert "-j" in help_text
+
+
+class TestJsonOutputIntegration:
+    """Integration tests for JSON output mode."""
+
+    def test_json_mode_output_structure(self):
+        """JSON mode should produce valid JSON with expected structure."""
+        import json
+        from io import StringIO
+        from venom_cache.output import Output, OutputMode
+
+        # Create output handler in JSON mode
+        out = Output(OutputMode.JSON, 0)
+        out.set_metadata("https://test.example.com")
+
+        # Capture stdout
+        captured = StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+
+        out.finalize()
+
+        sys.stdout = old_stdout
+        output = captured.getvalue()
+
+        # Parse and verify structure
+        data = json.loads(output)
+        assert "metadata" in data
+        assert "summary" in data
+        assert "findings" in data
+
+        # Verify metadata fields
+        assert data["metadata"]["tool"] == "venom-cache"
+        assert data["metadata"]["target_url"] == "https://test.example.com"
+        assert "scan_started" in data["metadata"]
+        assert "scan_completed" in data["metadata"]
+        assert "scan_duration_seconds" in data["metadata"]
+
+        # Verify summary structure
+        assert "total_findings" in data["summary"]
+        assert "findings_by_type" in data["summary"]
+        assert "findings_by_severity" in data["summary"]
+
+    def test_json_mode_suppresses_text(self):
+        """JSON mode should not output any text, only final JSON."""
+        import json
+        from io import StringIO
+        from venom_cache.output import Output, OutputMode
+
+        out = Output(OutputMode.JSON, 0)
+        out.set_metadata("https://test.example.com")
+
+        # Capture stdout
+        captured = StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+
+        # These should not produce any output in JSON mode
+        out.info("This is info")
+        out.status("Status update")
+        out.success("Success message")
+
+        # Only finalize should produce output
+        out.finalize()
+
+        sys.stdout = old_stdout
+        output = captured.getvalue()
+
+        # Should be valid JSON, not mixed text
+        data = json.loads(output)  # Would fail if there's mixed text
+        assert isinstance(data, dict)
+
+    def test_json_mode_no_ansi_codes(self):
+        """JSON output should not contain ANSI escape codes."""
+        import json
+        from io import StringIO
+        from venom_cache.output import Output, OutputMode
+
+        # Force color enabled but use JSON mode
+        out = Output(OutputMode.JSON, 0, force_color=True)
+        out.set_metadata("https://test.example.com")
+
+        captured = StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+
+        out.finalize()
+
+        sys.stdout = old_stdout
+        output = captured.getvalue()
+
+        # Check for absence of ANSI codes
+        assert "\033[" not in output
+        assert "\x1b[" not in output
+
+    def test_json_mode_verbose_to_stderr(self):
+        """Verbose/debug output should go to stderr, not pollute JSON stdout."""
+        import json
+        from io import StringIO
+        from venom_cache.output import Output, OutputMode
+
+        out = Output(OutputMode.JSON, 2)  # Verbosity level 2
+        out.set_metadata("https://test.example.com")
+
+        captured_stdout = StringIO()
+        captured_stderr = StringIO()
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        sys.stdout = captured_stdout
+        sys.stderr = captured_stderr
+
+        out.debug("Debug message", level=1)
+        out.debug("More debug", level=2)
+        out.error("Error message")  # Errors always go to stderr
+        out.finalize()
+
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
+        stdout_output = captured_stdout.getvalue()
+        stderr_output = captured_stderr.getvalue()
+
+        # Stdout should be valid JSON only
+        data = json.loads(stdout_output)
+        assert isinstance(data, dict)
+
+        # Debug and error messages should be in stderr
+        assert "Debug message" in stderr_output
+        assert "More debug" in stderr_output
+        assert "Error message" in stderr_output
+
+    def test_json_mode_with_findings(self):
+        """JSON mode should include collected findings."""
+        import json
+        from io import StringIO
+        from dataclasses import dataclass
+        from venom_cache.output import Output, OutputMode
+
+        @dataclass
+        class MockFinding:
+            header_name: str
+            canary: str
+            reflected_in_body: bool
+            reflected_in_headers: list
+            is_significant: bool
+
+        out = Output(OutputMode.JSON, 0)
+        out.set_metadata("https://test.example.com")
+
+        # Add a mock finding
+        finding = MockFinding(
+            header_name="X-Forwarded-Host",
+            canary="venom-abc123",
+            reflected_in_body=True,
+            reflected_in_headers=[],
+            is_significant=True,
+        )
+        out.add_finding(finding, "header_poisoning")
+
+        captured = StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+
+        out.finalize()
+
+        sys.stdout = old_stdout
+        output = captured.getvalue()
+
+        data = json.loads(output)
+        assert data["summary"]["total_findings"] == 1
+        assert data["summary"]["findings_by_type"]["header_poisoning"] == 1
+        assert len(data["findings"]) == 1
+        assert data["findings"][0]["header_name"] == "X-Forwarded-Host"
+        assert data["findings"][0]["finding_type"] == "header_poisoning"
