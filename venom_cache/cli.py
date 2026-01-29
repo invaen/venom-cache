@@ -13,7 +13,7 @@ from venom_cache.cache_detector import detect_cache_headers, get_cache_info
 from venom_cache.fat_get_prober import probe_all_fat_get
 from venom_cache.header_prober import probe_headers
 from venom_cache.http_transport import make_request
-from venom_cache.output import Output, OutputMode
+from venom_cache.output import Output, OutputMode, Severity
 from venom_cache.param_prober import probe_params
 from venom_cache.wcd_prober import probe_wcd
 from venom_cache.wordlists import (
@@ -369,27 +369,36 @@ def scan_url(
 
         # Report findings
         if significant:
-            out.info(f"\n[!] {len(significant)} POTENTIALLY VULNERABLE headers found:")
+            out.info(f"\n{len(significant)} POTENTIALLY VULNERABLE headers found:")
             for f in significant:
                 loc = []
                 if f.reflected_in_body:
                     loc.append("body")
                 if f.reflected_in_headers:
                     loc.append(f"headers({', '.join(f.reflected_in_headers)})")
-                out.info(f"    {f.header_name} -> reflected in {', '.join(loc)}")
-                if args.verbose >= 1:
-                    out.info(f"        Canary: {f.canary}")
+                out.finding(
+                    finding_type="Header Poisoning",
+                    name=f.header_name,
+                    severity=Severity.MEDIUM,
+                    details=f"Reflected in {', '.join(loc)}",
+                    extra={"canary": f.canary} if args.verbose >= 1 else None,
+                )
         elif reflected:
-            out.info(f"\n[*] {len(reflected)} headers reflected (no significant diff):")
+            out.info(f"\n{len(reflected)} headers reflected (no significant diff):")
             for f in reflected:
                 loc = []
                 if f.reflected_in_body:
                     loc.append("body")
                 if f.reflected_in_headers:
                     loc.append(f"headers({', '.join(f.reflected_in_headers)})")
-                out.info(f"    {f.header_name} -> {', '.join(loc)}")
+                out.finding(
+                    finding_type="Header Reflection",
+                    name=f.header_name,
+                    severity=Severity.LOW,
+                    details=f"Reflected in {', '.join(loc)}",
+                )
         else:
-            out.info("\n[+] No header reflection detected")
+            out.info("\nNo header reflection detected")
 
         # Summary for headers
         out.info(f"\nHeader summary: {len(findings)} headers tested, {len(reflected)} reflected, {len(significant)} potentially vulnerable")
@@ -417,27 +426,36 @@ def scan_url(
 
         # Report parameter findings
         if param_significant:
-            out.info(f"\n[!] {len(param_significant)} POTENTIALLY VULNERABLE parameters found:")
+            out.info(f"\n{len(param_significant)} POTENTIALLY VULNERABLE parameters found:")
             for f in param_significant:
                 loc = []
                 if f.reflected_in_body:
                     loc.append("body")
                 if f.reflected_in_headers:
                     loc.append(f"headers({', '.join(f.reflected_in_headers)})")
-                out.info(f"    {f.param_name} -> reflected in {', '.join(loc)}")
-                if args.verbose >= 1:
-                    out.info(f"        Canary: {f.canary}")
+                out.finding(
+                    finding_type="Parameter Poisoning",
+                    name=f.param_name,
+                    severity=Severity.MEDIUM,
+                    details=f"Reflected in {', '.join(loc)}",
+                    extra={"canary": f.canary} if args.verbose >= 1 else None,
+                )
         elif param_reflected:
-            out.info(f"\n[*] {len(param_reflected)} parameters reflected (no significant diff):")
+            out.info(f"\n{len(param_reflected)} parameters reflected (no significant diff):")
             for f in param_reflected:
                 loc = []
                 if f.reflected_in_body:
                     loc.append("body")
                 if f.reflected_in_headers:
                     loc.append(f"headers({', '.join(f.reflected_in_headers)})")
-                out.info(f"    {f.param_name} -> {', '.join(loc)}")
+                out.finding(
+                    finding_type="Parameter Reflection",
+                    name=f.param_name,
+                    severity=Severity.LOW,
+                    details=f"Reflected in {', '.join(loc)}",
+                )
         else:
-            out.info("\n[+] No parameter reflection detected")
+            out.info("\nNo parameter reflection detected")
 
         # Summary for parameters
         out.info(f"\nParameter summary: {len(param_findings)} parameters tested, {len(param_reflected)} reflected, {len(param_significant)} potentially vulnerable")
@@ -471,7 +489,7 @@ def scan_url(
 
             # Report fat GET findings
             if fat_get_significant:
-                out.info(f"\n[!] {len(fat_get_significant)} FAT GET vulnerabilities found:")
+                out.info(f"\n{len(fat_get_significant)} FAT GET vulnerabilities found:")
                 for f in fat_get_significant:
                     loc = []
                     if f.reflected_in_body:
@@ -479,11 +497,20 @@ def scan_url(
                     if f.reflected_in_headers:
                         loc.append(f"headers({', '.join(f.reflected_in_headers)})")
                     override_info = f" (via {f.method_override_header})" if f.method_override_header else ""
-                    out.info(f"    {f.param_name}{override_info} -> reflected in {', '.join(loc)}")
-                    if args.verbose >= 1:
-                        out.info(f"        Canary: {f.canary}")
+                    extra = {"canary": f.canary} if args.verbose >= 1 else None
+                    if f.method_override_header and extra:
+                        extra["override_header"] = f.method_override_header
+                    elif f.method_override_header:
+                        extra = {"override_header": f.method_override_header}
+                    out.finding(
+                        finding_type="Fat GET Poisoning",
+                        name=f.param_name,
+                        severity=Severity.MEDIUM,
+                        details=f"Reflected in {', '.join(loc)}{override_info}",
+                        extra=extra if extra else None,
+                    )
             elif fat_get_reflected:
-                out.info(f"\n[*] {len(fat_get_reflected)} body params reflected (no significant diff):")
+                out.info(f"\n{len(fat_get_reflected)} body params reflected (no significant diff):")
                 for f in fat_get_reflected:
                     loc = []
                     if f.reflected_in_body:
@@ -491,9 +518,14 @@ def scan_url(
                     if f.reflected_in_headers:
                         loc.append(f"headers({', '.join(f.reflected_in_headers)})")
                     override_info = f" (via {f.method_override_header})" if f.method_override_header else ""
-                    out.info(f"    {f.param_name}{override_info} -> {', '.join(loc)}")
+                    out.finding(
+                        finding_type="Fat GET Reflection",
+                        name=f.param_name,
+                        severity=Severity.LOW,
+                        details=f"Reflected in {', '.join(loc)}{override_info}",
+                    )
             else:
-                out.info("\n[+] No fat GET reflection detected")
+                out.info("\nNo fat GET reflection detected")
 
             # Summary for fat GET
             out.info(f"\nFat GET summary: {len(fat_get_params)} params tested, {len(fat_get_reflected)} reflected, {len(fat_get_significant)} vulnerable")
@@ -528,18 +560,31 @@ def scan_url(
 
             # Report WCD findings
             if wcd_significant:
-                out.info(f"\n[!] {len(wcd_significant)} WEB CACHE DECEPTION paths found:")
+                out.info(f"\n{len(wcd_significant)} WEB CACHE DECEPTION paths found:")
                 for f in wcd_significant:
-                    out.info(f"    {f.confused_path}")
-                    out.info(f"        delimiter: {repr(f.delimiter)}, extension: {f.extension}")
+                    extra = {"delimiter": repr(f.delimiter), "extension": f.extension}
                     if args.verbose >= 1:
-                        out.info(f"        cached: {f.second_request_hit}, content matches: {f.content_matches_baseline}")
+                        extra["cached"] = f.second_request_hit
+                        extra["content_matches"] = f.content_matches_baseline
+                    out.finding(
+                        finding_type="Web Cache Deception",
+                        name=f.confused_path,
+                        severity=Severity.HIGH,
+                        details=f"Vulnerable path confusion with {repr(f.delimiter)} delimiter",
+                        extra=extra,
+                    )
             elif wcd_cached:
-                out.info(f"\n[*] {len(wcd_cached)} paths cached (content mismatch):")
+                out.info(f"\n{len(wcd_cached)} paths cached (content mismatch):")
                 for f in wcd_cached:
-                    out.info(f"    {f.confused_path} (delimiter: {repr(f.delimiter)}, extension: {f.extension})")
+                    out.finding(
+                        finding_type="Web Cache Deception",
+                        name=f.confused_path,
+                        severity=Severity.MEDIUM,
+                        details=f"Cached but content mismatch",
+                        extra={"delimiter": repr(f.delimiter), "extension": f.extension},
+                    )
             else:
-                out.info("\n[+] No WCD vulnerabilities detected")
+                out.info("\nNo WCD vulnerabilities detected")
 
             # Summary for WCD
             out.info(f"\nWCD summary: {len(wcd_findings)} paths tested, {len(wcd_cached)} cached, {len(wcd_significant)} vulnerable")
