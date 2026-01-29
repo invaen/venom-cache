@@ -71,6 +71,7 @@ class TargetConnection:
         method: str = "GET",
         path: Optional[str] = None,
         headers: Optional[Dict[str, str]] = None,
+        body: Optional[bytes] = None,
     ) -> Tuple[int, Dict[str, str], bytes]:
         """Make HTTP request and return response.
 
@@ -78,6 +79,7 @@ class TargetConnection:
             method: HTTP method (GET, POST, etc.)
             path: Request path (uses stored path if None)
             headers: Optional headers to include
+            body: Optional request body (for POST, PUT, or fat GET)
 
         Returns:
             Tuple of (status_code, response_headers, body)
@@ -88,30 +90,36 @@ class TargetConnection:
         if headers is None:
             headers = {}
 
+        # Add Content-Length header if body provided and not already set
+        if body is not None:
+            headers_lower = {k.lower(): k for k in headers}
+            if "content-length" not in headers_lower:
+                headers["Content-Length"] = str(len(body))
+
         conn = self._get_connection()
 
         try:
-            conn.request(method, path, headers=headers)
+            conn.request(method, path, body=body, headers=headers)
             response = conn.getresponse()
 
             status = response.status
             resp_headers = dict(response.getheaders())
-            body = response.read()
+            resp_body = response.read()
 
-            return (status, resp_headers, body)
+            return (status, resp_headers, resp_body)
 
         except (http.client.HTTPException, ConnectionError, OSError):
             # Connection died, reset and retry once
             self.close()
             conn = self._get_connection()
-            conn.request(method, path, headers=headers)
+            conn.request(method, path, body=body, headers=headers)
             response = conn.getresponse()
 
             status = response.status
             resp_headers = dict(response.getheaders())
-            body = response.read()
+            resp_body = response.read()
 
-            return (status, resp_headers, body)
+            return (status, resp_headers, resp_body)
 
     def close(self) -> None:
         """Close the connection."""
@@ -137,6 +145,7 @@ def make_request(
     timeout: float = 10.0,
     insecure: bool = False,
     use_cache_buster: bool = True,
+    body: Optional[bytes] = None,
 ) -> Tuple[int, Dict[str, str], bytes]:
     """Make a one-off HTTP request.
 
@@ -149,6 +158,7 @@ def make_request(
         timeout: Request timeout in seconds
         insecure: If True, disable SSL certificate verification
         use_cache_buster: If True, inject unique cache buster into URL
+        body: Optional request body (for POST, PUT, or fat GET)
 
     Returns:
         Tuple of (status_code, response_headers, body)
@@ -156,4 +166,4 @@ def make_request(
     with TargetConnection(
         url, timeout=timeout, insecure=insecure, use_cache_buster=use_cache_buster
     ) as conn:
-        return conn.request(headers=headers)
+        return conn.request(headers=headers, body=body)
