@@ -424,6 +424,27 @@ def scan_url(
         # Summary for headers
         out.info(f"\nHeader summary: {len(findings)} headers tested, {len(reflected)} reflected, {len(significant)} potentially vulnerable")
 
+        # Confirm header poisoning if --confirm and significant findings exist
+        if args.confirm and significant:
+            out.info("\nConfirming header poisoning...")
+            for f in significant:
+                confirmed, msg = confirm_header_poisoning(
+                    url,
+                    f,
+                    timeout=args.timeout,
+                    insecure=args.insecure,
+                    custom_headers=custom_headers,
+                )
+                if confirmed:
+                    out.finding(
+                        finding_type="CONFIRMED Header Poisoning",
+                        name=f.header_name,
+                        severity=Severity.HIGH,
+                        details=msg,
+                    )
+                else:
+                    out.debug(f"{f.header_name}: {msg}", level=1)
+
         # Parameter poisoning scan
         param_wordlist = get_param_wordlist()
         out.info(f"\nProbing {len(param_wordlist)} parameters for reflection...")
@@ -482,6 +503,27 @@ def scan_url(
 
         # Summary for parameters
         out.info(f"\nParameter summary: {len(param_findings)} parameters tested, {len(param_reflected)} reflected, {len(param_significant)} potentially vulnerable")
+
+        # Confirm parameter poisoning if --confirm and significant findings exist
+        if args.confirm and param_significant:
+            out.info("\nConfirming parameter poisoning...")
+            for f in param_significant:
+                confirmed, msg = confirm_param_poisoning(
+                    url,
+                    f,
+                    timeout=args.timeout,
+                    insecure=args.insecure,
+                    custom_headers=custom_headers,
+                )
+                if confirmed:
+                    out.finding(
+                        finding_type="CONFIRMED Parameter Poisoning",
+                        name=f.param_name,
+                        severity=Severity.HIGH,
+                        details=msg,
+                    )
+                else:
+                    out.debug(f"{f.param_name}: {msg}", level=1)
 
         # Fat GET scan - only if enabled
         fat_get_findings = []
@@ -704,17 +746,6 @@ def main() -> int:
         from venom_cache.rate_limiter import configure_rate_limiter
 
         configure_rate_limiter(args.delay)
-
-    # Determine output mode
-    if args.json:
-        mode = OutputMode.JSON
-    elif args.quiet:
-        mode = OutputMode.QUIET
-    else:
-        mode = OutputMode.NORMAL
-
-    # Create output handler
-    out = Output(mode, args.verbose)
 
     # Build custom headers from -H and -c flags
     custom_headers = build_request_headers(args.headers, args.cookies)
