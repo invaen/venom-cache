@@ -50,6 +50,7 @@ def verify_cache_buster_isolation(
     url: str,
     timeout: float = 10.0,
     insecure: bool = False,
+    headers: dict = None,
 ) -> Tuple[bool, str]:
     """Verify that cache busters create isolated cache entries.
 
@@ -66,6 +67,7 @@ def verify_cache_buster_isolation(
         url: Target URL to test
         timeout: Request timeout in seconds
         insecure: If True, disable SSL certificate verification
+        headers: Optional custom headers to include in requests
 
     Returns:
         Tuple of (is_safe: bool, message: str)
@@ -90,15 +92,15 @@ def verify_cache_buster_isolation(
         url2 = url2.rsplit("=", 1)[0] + "=" + cb2
 
         # Request 1: cb1
-        _, _, body1 = make_request(url1, timeout=timeout, insecure=insecure, use_cache_buster=False)
+        _, _, body1 = make_request(url1, timeout=timeout, insecure=insecure, use_cache_buster=False, headers=headers)
         h1 = hash_body(body1)
 
         # Request 2: cb2
-        _, _, body2 = make_request(url2, timeout=timeout, insecure=insecure, use_cache_buster=False)
+        _, _, body2 = make_request(url2, timeout=timeout, insecure=insecure, use_cache_buster=False, headers=headers)
         h2 = hash_body(body2)
 
         # Request 3: cb1 again
-        _, _, body3 = make_request(url1, timeout=timeout, insecure=insecure, use_cache_buster=False)
+        _, _, body3 = make_request(url1, timeout=timeout, insecure=insecure, use_cache_buster=False, headers=headers)
         h3 = hash_body(body3)
 
         # Verification logic

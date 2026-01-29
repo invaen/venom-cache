@@ -59,6 +59,7 @@ def probe_param(
     baseline: ResponseBaseline,
     timeout: float = 10.0,
     insecure: bool = False,
+    custom_headers: Optional[Dict[str, str]] = None,
 ) -> ParamFinding:
     """Probe a single parameter for cache poisoning potential.
 
@@ -68,6 +69,7 @@ def probe_param(
         baseline: Previously captured baseline response
         timeout: Request timeout in seconds
         insecure: If True, disable SSL certificate verification
+        custom_headers: Optional base headers (auth, cookies, etc.) to include
 
     Returns:
         ParamFinding with evidence of reflection and response diff
@@ -80,6 +82,7 @@ def probe_param(
     # Make request with the injected parameter
     status, headers, body = make_request(
         probed_url,
+        headers=custom_headers,
         timeout=timeout,
         insecure=insecure,
         use_cache_buster=True,
@@ -112,6 +115,7 @@ def probe_params(
     timeout: float = 10.0,
     insecure: bool = False,
     baseline: Optional[ResponseBaseline] = None,
+    custom_headers: Optional[Dict[str, str]] = None,
 ) -> List[ParamFinding]:
     """Probe multiple parameters for cache poisoning potential.
 
@@ -121,6 +125,7 @@ def probe_params(
         timeout: Request timeout in seconds
         insecure: If True, disable SSL certificate verification
         baseline: Optional pre-captured baseline (captures new one if None)
+        custom_headers: Optional base headers (auth, cookies, etc.) to include
 
     Returns:
         List of ParamFinding sorted by significance (significant first)
@@ -138,6 +143,7 @@ def probe_params(
             baseline,
             timeout=timeout,
             insecure=insecure,
+            custom_headers=custom_headers,
         )
         findings.append(finding)
 

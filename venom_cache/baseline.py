@@ -104,6 +104,7 @@ def capture_baseline(
     url: str,
     timeout: float = 10.0,
     insecure: bool = False,
+    headers: Optional[Dict[str, str]] = None,
 ) -> ResponseBaseline:
     """Capture a baseline response for later comparison.
 
@@ -111,15 +112,16 @@ def capture_baseline(
         url: Target URL to request
         timeout: Request timeout in seconds
         insecure: If True, disable SSL certificate verification
+        headers: Optional custom headers to include in request
 
     Returns:
         ResponseBaseline with captured response data
     """
-    status, headers, body = make_request(
-        url, timeout=timeout, insecure=insecure, use_cache_buster=True
+    status, resp_headers, body = make_request(
+        url, timeout=timeout, insecure=insecure, use_cache_buster=True, headers=headers
     )
 
-    content_type = headers.get("Content-Type") or headers.get("content-type")
+    content_type = resp_headers.get("Content-Type") or resp_headers.get("content-type")
 
     body_hash = _hash_body(body)
     static_body = strip_dynamic_content(body)
@@ -128,7 +130,7 @@ def capture_baseline(
     return ResponseBaseline(
         url=url,
         status=status,
-        headers=headers,
+        headers=resp_headers,
         body_hash=body_hash,
         body_length=len(body),
         content_type=content_type,
@@ -199,6 +201,7 @@ def check_response_stability(
     url: str,
     timeout: float = 10.0,
     insecure: bool = False,
+    headers: Optional[Dict[str, str]] = None,
 ) -> Tuple[ResponseBaseline, ResponseDiff, bool]:
     """Check if responses are stable between requests.
 
@@ -209,20 +212,21 @@ def check_response_stability(
         url: Target URL to test
         timeout: Request timeout in seconds
         insecure: If True, disable SSL certificate verification
+        headers: Optional custom headers to include in requests
 
     Returns:
         Tuple of (baseline, diff, is_stable)
     """
     # Capture baseline
-    baseline = capture_baseline(url, timeout=timeout, insecure=insecure)
+    baseline = capture_baseline(url, timeout=timeout, insecure=insecure, headers=headers)
 
     # Make second request
-    status, headers, body = make_request(
-        url, timeout=timeout, insecure=insecure, use_cache_buster=True
+    status, resp_headers, body = make_request(
+        url, timeout=timeout, insecure=insecure, use_cache_buster=True, headers=headers
     )
 
     # Compare
-    diff = compare_response(baseline, status, headers, body)
+    diff = compare_response(baseline, status, resp_headers, body)
 
     # Response is stable if no significant changes
     is_stable = not diff.significant

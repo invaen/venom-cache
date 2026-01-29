@@ -69,6 +69,7 @@ def probe_header(
     baseline: ResponseBaseline,
     timeout: float = 10.0,
     insecure: bool = False,
+    custom_headers: Optional[Dict[str, str]] = None,
 ) -> HeaderFinding:
     """Probe a single header for cache poisoning potential.
 
@@ -78,16 +79,23 @@ def probe_header(
         baseline: Previously captured baseline response
         timeout: Request timeout in seconds
         insecure: If True, disable SSL certificate verification
+        custom_headers: Optional base headers (auth, cookies, etc.) to include
 
     Returns:
         HeaderFinding with evidence of reflection and response diff
     """
     canary = generate_canary()
 
+    # Build headers: custom_headers as base, probe header overrides
+    request_headers = {}
+    if custom_headers:
+        request_headers.update(custom_headers)
+    request_headers[header_name] = canary
+
     # Make request with the injected header
     status, headers, body = make_request(
         url,
-        headers={header_name: canary},
+        headers=request_headers,
         timeout=timeout,
         insecure=insecure,
         use_cache_buster=True,
@@ -120,6 +128,7 @@ def probe_headers(
     timeout: float = 10.0,
     insecure: bool = False,
     baseline: Optional[ResponseBaseline] = None,
+    custom_headers: Optional[Dict[str, str]] = None,
 ) -> List[HeaderFinding]:
     """Probe multiple headers for cache poisoning potential.
 
@@ -129,6 +138,7 @@ def probe_headers(
         timeout: Request timeout in seconds
         insecure: If True, disable SSL certificate verification
         baseline: Optional pre-captured baseline (captures new one if None)
+        custom_headers: Optional base headers (auth, cookies, etc.) to include
 
     Returns:
         List of HeaderFinding sorted by significance (significant first)
@@ -146,6 +156,7 @@ def probe_headers(
             baseline,
             timeout=timeout,
             insecure=insecure,
+            custom_headers=custom_headers,
         )
         findings.append(finding)
 

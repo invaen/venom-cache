@@ -27,6 +27,7 @@ def probe_fat_get(
     baseline: ResponseBaseline,
     timeout: float = 10.0,
     insecure: bool = False,
+    custom_headers: Optional[Dict[str, str]] = None,
 ) -> FatGetFinding:
     """Probe a single body parameter for fat GET vulnerability.
 
@@ -39,6 +40,7 @@ def probe_fat_get(
         baseline: Previously captured baseline response
         timeout: Request timeout in seconds
         insecure: If True, disable SSL certificate verification
+        custom_headers: Optional base headers (auth, cookies, etc.) to include
 
     Returns:
         FatGetFinding with evidence of reflection and response diff
@@ -48,10 +50,16 @@ def probe_fat_get(
     # Build form-encoded body
     body = f"{param_name}={canary}".encode()
 
+    # Build headers: custom_headers as base, probe headers override
+    request_headers = {}
+    if custom_headers:
+        request_headers.update(custom_headers)
+    request_headers["Content-Type"] = "application/x-www-form-urlencoded"
+
     # Make GET request with body (fat GET)
     status, headers, resp_body = make_request(
         url,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        headers=request_headers,
         timeout=timeout,
         insecure=insecure,
         use_cache_buster=True,
@@ -86,6 +94,7 @@ def probe_method_override(
     method_override_headers: List[str],
     timeout: float = 10.0,
     insecure: bool = False,
+    custom_headers: Optional[Dict[str, str]] = None,
 ) -> Optional[FatGetFinding]:
     """Probe for fat GET using method override headers.
 
@@ -99,6 +108,7 @@ def probe_method_override(
         method_override_headers: List of headers to try (e.g., X-HTTP-Method-Override)
         timeout: Request timeout in seconds
         insecure: If True, disable SSL certificate verification
+        custom_headers: Optional base headers (auth, cookies, etc.) to include
 
     Returns:
         FatGetFinding if reflection detected with method override, None otherwise
@@ -107,12 +117,16 @@ def probe_method_override(
     body = f"{param_name}={canary}".encode()
 
     for override_header in method_override_headers:
+        # Build headers: custom_headers as base, probe headers override
+        request_headers = {}
+        if custom_headers:
+            request_headers.update(custom_headers)
+        request_headers["Content-Type"] = "application/x-www-form-urlencoded"
+        request_headers[override_header] = "POST"
+
         status, headers, resp_body = make_request(
             url,
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                override_header: "POST",
-            },
+            headers=request_headers,
             timeout=timeout,
             insecure=insecure,
             use_cache_buster=True,
@@ -148,6 +162,7 @@ def probe_all_fat_get(
     timeout: float = 10.0,
     insecure: bool = False,
     baseline: Optional[ResponseBaseline] = None,
+    custom_headers: Optional[Dict[str, str]] = None,
 ) -> List[FatGetFinding]:
     """Probe all body parameters for fat GET vulnerabilities.
 
@@ -161,6 +176,7 @@ def probe_all_fat_get(
         timeout: Request timeout in seconds
         insecure: If True, disable SSL certificate verification
         baseline: Optional pre-captured baseline (captures new one if None)
+        custom_headers: Optional base headers (auth, cookies, etc.) to include
 
     Returns:
         List of FatGetFinding sorted by significance (significant first)
@@ -182,6 +198,7 @@ def probe_all_fat_get(
             baseline,
             timeout=timeout,
             insecure=insecure,
+            custom_headers=custom_headers,
         )
         if finding.reflected_in_body or finding.reflected_in_headers:
             findings.append(finding)
@@ -197,6 +214,7 @@ def probe_all_fat_get(
                 method_override_headers,
                 timeout=timeout,
                 insecure=insecure,
+                custom_headers=custom_headers,
             )
             if finding is not None:
                 findings.append(finding)

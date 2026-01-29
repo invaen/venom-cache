@@ -217,16 +217,20 @@ def get_target_urls(args: argparse.Namespace) -> list[str]:
     return urls
 
 
-def scan_url(url: str, args: argparse.Namespace) -> int:
+def scan_url(url: str, args: argparse.Namespace, custom_headers: dict = None) -> int:
     """Scan a single URL for cache poisoning vulnerabilities.
 
     Args:
         url: Target URL to scan
         args: Parsed command line arguments
+        custom_headers: Optional custom headers to include in all requests
 
     Returns:
         0 on success, 1 on error
     """
+    if custom_headers is None:
+        custom_headers = {}
+
     # Validate URL scheme
     if not url.startswith(("http://", "https://")):
         print(
@@ -238,7 +242,7 @@ def scan_url(url: str, args: argparse.Namespace) -> int:
     # Verify cache buster isolation FIRST
     print("Verifying cache buster isolation...")
     is_safe, message = verify_cache_buster_isolation(
-        url, args.timeout, args.insecure
+        url, args.timeout, args.insecure, headers=custom_headers
     )
     if not is_safe:
         print(f"ERROR: {message}", file=sys.stderr)
@@ -259,6 +263,7 @@ def scan_url(url: str, args: argparse.Namespace) -> int:
             url,
             timeout=args.timeout,
             insecure=args.insecure,
+            headers=custom_headers,
         )
 
         print(f"Status: {baseline.status}")
@@ -305,6 +310,7 @@ def scan_url(url: str, args: argparse.Namespace) -> int:
             timeout=args.timeout,
             insecure=args.insecure,
             baseline=baseline,
+            custom_headers=custom_headers,
         )
 
         # Categorize findings
@@ -348,6 +354,7 @@ def scan_url(url: str, args: argparse.Namespace) -> int:
             timeout=args.timeout,
             insecure=args.insecure,
             baseline=baseline,
+            custom_headers=custom_headers,
         )
 
         # Categorize parameter findings
@@ -397,6 +404,7 @@ def scan_url(url: str, args: argparse.Namespace) -> int:
                 timeout=args.timeout,
                 insecure=args.insecure,
                 baseline=baseline,
+                custom_headers=custom_headers,
             )
 
             # Categorize fat GET findings
@@ -449,6 +457,7 @@ def scan_url(url: str, args: argparse.Namespace) -> int:
                 extensions=extensions,
                 timeout=args.timeout,
                 insecure=args.insecure,
+                custom_headers=custom_headers,
             )
 
             # Categorize WCD findings
@@ -542,6 +551,9 @@ def main() -> int:
         args.wcd = True
         args.fat_get = True
 
+    # Build custom headers from -H and -c flags
+    custom_headers = build_request_headers(args.headers, args.cookies)
+
     # Get target URLs from either positional arg or file
     try:
         urls = get_target_urls(args)
@@ -560,7 +572,7 @@ def main() -> int:
             print(f"Scanning URL {i} of {total_urls}: {url}")
             print("=" * 60)
 
-        result = scan_url(url, args)
+        result = scan_url(url, args, custom_headers)
 
         if result == 0:
             success_count += 1

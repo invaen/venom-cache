@@ -105,6 +105,7 @@ def probe_wcd(
     extensions: Optional[List[str]] = None,
     timeout: float = 10.0,
     insecure: bool = False,
+    custom_headers: Optional[Dict[str, str]] = None,
 ) -> List[WcdFinding]:
     """Probe for Web Cache Deception vulnerabilities.
 
@@ -118,6 +119,7 @@ def probe_wcd(
         extensions: Static extensions to test (uses wordlist defaults if None)
         timeout: Request timeout in seconds
         insecure: If True, disable SSL certificate verification
+        custom_headers: Optional base headers (auth, cookies, etc.) to include
 
     Returns:
         List of WcdFinding sorted by significance (is_significant=True first)
@@ -139,6 +141,7 @@ def probe_wcd(
         # use_cache_buster=False because we WANT caching behavior
         status1, headers1, body1 = make_request(
             confused_url,
+            headers=custom_headers,
             timeout=timeout,
             insecure=insecure,
             use_cache_buster=False,
@@ -150,6 +153,7 @@ def probe_wcd(
         # Request 2: Make same request (check for HIT)
         status2, headers2, body2 = make_request(
             confused_url,
+            headers=custom_headers,
             timeout=timeout,
             insecure=insecure,
             use_cache_buster=False,
