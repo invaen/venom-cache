@@ -1,6 +1,7 @@
 """Command-line interface for venom-cache."""
 
 import argparse
+import pathlib
 import socket
 import ssl
 import sys
@@ -16,7 +17,7 @@ from venom_cache.param_prober import probe_params
 from venom_cache.wcd_prober import probe_wcd
 from venom_cache.wordlists import (
     get_fat_get_params,
-    get_header_wordlist,
+    get_header_wordlist_with_custom,
     get_method_override_headers,
     get_param_wordlist,
     get_path_delimiters,
@@ -63,6 +64,26 @@ def parse_cookie(cookie_string: str) -> Tuple[str, str]:
     # Split on first = only to handle values containing =
     name, value = cookie_string.split("=", 1)
     return (name.strip(), value.strip())
+
+
+def validate_wordlist_path(filepath: str) -> str:
+    """Validate wordlist file exists.
+
+    Args:
+        filepath: Path to wordlist file
+
+    Returns:
+        Resolved path string
+
+    Raises:
+        argparse.ArgumentTypeError: If file doesn't exist or isn't a file
+    """
+    path = pathlib.Path(filepath)
+    if not path.exists():
+        raise argparse.ArgumentTypeError(f"Wordlist not found: {filepath}")
+    if not path.is_file():
+        raise argparse.ArgumentTypeError(f"Not a file: {filepath}")
+    return str(path)
 
 
 def build_request_headers(
@@ -178,6 +199,14 @@ Examples:
         default=[],
         metavar="COOKIE",
         help="Cookie 'name=value' (repeatable)",
+    )
+
+    parser.add_argument(
+        "-w",
+        "--wordlist",
+        type=validate_wordlist_path,
+        metavar="FILE",
+        help="Custom header wordlist file (default: built-in)",
     )
 
     return parser
@@ -301,7 +330,7 @@ def scan_url(url: str, args: argparse.Namespace, custom_headers: dict = None) ->
             print(f"  Static content: {'changed' if diff.static_body_changed else 'identical'}")
 
         # Header poisoning scan
-        wordlist = get_header_wordlist()
+        wordlist = get_header_wordlist_with_custom(args.wordlist)
         print(f"\nProbing {len(wordlist)} headers for reflection...")
 
         findings = probe_headers(
