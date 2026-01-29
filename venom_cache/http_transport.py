@@ -5,6 +5,8 @@ import ssl
 from typing import Dict, Optional, Tuple
 from urllib.parse import urlparse
 
+from venom_cache.cache_buster import inject_cache_buster
+
 
 class TargetConnection:
     """Reusable connection to a single target with connection pooling."""
@@ -14,6 +16,7 @@ class TargetConnection:
         url: str,
         timeout: float = 10.0,
         insecure: bool = False,
+        use_cache_buster: bool = True,
     ) -> None:
         """Initialize connection parameters.
 
@@ -21,7 +24,12 @@ class TargetConnection:
             url: Target URL to connect to
             timeout: Request timeout in seconds
             insecure: If True, disable SSL certificate verification
+            use_cache_buster: If True, inject unique cache buster into URL
         """
+        # Inject cache buster BEFORE parsing to ensure it's in the path
+        if use_cache_buster:
+            url = inject_cache_buster(url)
+
         parsed = urlparse(url)
         self.scheme = parsed.scheme
         self.host = parsed.netloc
@@ -128,6 +136,7 @@ def make_request(
     headers: Optional[Dict[str, str]] = None,
     timeout: float = 10.0,
     insecure: bool = False,
+    use_cache_buster: bool = True,
 ) -> Tuple[int, Dict[str, str], bytes]:
     """Make a one-off HTTP request.
 
@@ -139,9 +148,12 @@ def make_request(
         headers: Optional headers to include
         timeout: Request timeout in seconds
         insecure: If True, disable SSL certificate verification
+        use_cache_buster: If True, inject unique cache buster into URL
 
     Returns:
         Tuple of (status_code, response_headers, body)
     """
-    with TargetConnection(url, timeout=timeout, insecure=insecure) as conn:
+    with TargetConnection(
+        url, timeout=timeout, insecure=insecure, use_cache_buster=use_cache_buster
+    ) as conn:
         return conn.request(headers=headers)
