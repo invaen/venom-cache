@@ -121,3 +121,102 @@ def get_param_wordlist() -> List[str]:
         Copy of the UNKEYED_PARAMS list (safe to modify)
     """
     return UNKEYED_PARAMS.copy()
+
+
+# Static file extensions commonly cached by CDNs
+STATIC_EXTENSIONS: List[str] = [
+    # Most commonly cached
+    ".css",
+    ".js",
+    ".ico",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    # Fonts (often cached)
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".eot",
+    ".otf",
+    # Other static
+    ".pdf",
+    ".webp",
+    ".avif",
+]
+
+
+# Path delimiters for web cache deception testing
+# Based on PortSwigger research on framework behaviors
+PATH_DELIMITERS: List[str] = [
+    ";",      # Java Spring matrix variables
+    "%00",    # Null byte - OpenLiteSpeed
+    "%0a",    # Newline - Nginx with rewrites
+    "%23",    # Hash encoded
+    "%3f",    # Question mark encoded
+    ".",      # Dot - Ruby on Rails formatter
+    "/",      # Slash
+    "%2f",    # Slash encoded
+]
+
+
+def get_static_extensions() -> List[str]:
+    """Return default static extensions for WCD testing.
+
+    Returns:
+        Copy of the STATIC_EXTENSIONS list (safe to modify)
+    """
+    return STATIC_EXTENSIONS.copy()
+
+
+def get_path_delimiters() -> List[str]:
+    """Return path delimiters for WCD testing.
+
+    Returns:
+        Copy of the PATH_DELIMITERS list (safe to modify)
+    """
+    return PATH_DELIMITERS.copy()
+
+
+# Body parameter names for fat GET testing
+# These are commonly reflected when servers process GET request bodies
+FAT_GET_PARAMS: List[str] = [
+    "callback",  # JSONP often reflected
+    "param",     # Generic
+    "q",         # Search
+    "query",
+    "data",
+    "input",
+    "value",
+    "body",
+    "content",
+    "message",
+]
+
+
+# Method override headers for fat GET testing
+# Used to convince servers to process GET body as POST
+METHOD_OVERRIDE_HEADERS: List[str] = [
+    "X-HTTP-Method-Override",
+    "X-HTTP-Method",
+    "X-Method-Override",
+]
+
+
+def get_fat_get_params() -> List[str]:
+    """Return default body parameter names for fat GET testing.
+
+    Returns:
+        Copy of the FAT_GET_PARAMS list (safe to modify)
+    """
+    return FAT_GET_PARAMS.copy()
+
+
+def get_method_override_headers() -> List[str]:
+    """Return method override headers for fat GET testing.
+
+    Returns:
+        Copy of the METHOD_OVERRIDE_HEADERS list (safe to modify)
+    """
+    return METHOD_OVERRIDE_HEADERS.copy()

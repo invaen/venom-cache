@@ -8,10 +8,19 @@ import sys
 from venom_cache.baseline import check_response_stability
 from venom_cache.cache_buster import verify_cache_buster_isolation
 from venom_cache.cache_detector import detect_cache_headers, get_cache_info
+from venom_cache.fat_get_prober import probe_all_fat_get
 from venom_cache.header_prober import probe_headers
 from venom_cache.http_transport import make_request
 from venom_cache.param_prober import probe_params
-from venom_cache.wordlists import get_header_wordlist, get_param_wordlist
+from venom_cache.wcd_prober import probe_wcd
+from venom_cache.wordlists import (
+    get_fat_get_params,
+    get_header_wordlist,
+    get_method_override_headers,
+    get_param_wordlist,
+    get_path_delimiters,
+    get_static_extensions,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -55,6 +64,24 @@ Examples:
         help="Increase verbosity (-v, -vv, -vvv)",
     )
 
+    parser.add_argument(
+        "--wcd",
+        action="store_true",
+        help="Enable web cache deception (path confusion) detection",
+    )
+
+    parser.add_argument(
+        "--fat-get",
+        action="store_true",
+        help="Enable fat GET body poisoning detection",
+    )
+
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Enable all detection techniques (headers, params, fat-get, wcd)",
+    )
+
     return parser
 
 
@@ -62,6 +89,11 @@ def main() -> int:
     """Main entry point for venom-cache CLI."""
     parser = build_parser()
     args = parser.parse_args()
+
+    # Handle --all flag to enable all detection modes
+    if args.all:
+        args.wcd = True
+        args.fat_get = True
 
     # Validate URL scheme
     if not args.url.startswith(("http://", "https://")):
@@ -217,13 +249,121 @@ def main() -> int:
         # Summary for parameters
         print(f"\nParameter summary: {len(param_findings)} parameters tested, {len(param_reflected)} reflected, {len(param_significant)} potentially vulnerable")
 
+        # Fat GET scan - only if enabled
+        fat_get_findings = []
+        fat_get_significant = []
+        fat_get_reflected = []
+        if args.fat_get:
+            fat_get_params = get_fat_get_params()
+            method_override_headers = get_method_override_headers()
+            print(f"\nProbing {len(fat_get_params)} body parameters for fat GET...")
+
+            fat_get_findings = probe_all_fat_get(
+                args.url,
+                fat_get_params,
+                method_override_headers,
+                timeout=args.timeout,
+                insecure=args.insecure,
+                baseline=baseline,
+            )
+
+            # Categorize fat GET findings
+            fat_get_significant = [f for f in fat_get_findings if f.is_significant]
+            fat_get_reflected = [f for f in fat_get_findings if f.reflected_in_body or f.reflected_in_headers]
+
+            # Report fat GET findings
+            if fat_get_significant:
+                print(f"\n[!] {len(fat_get_significant)} FAT GET vulnerabilities found:")
+                for f in fat_get_significant:
+                    loc = []
+                    if f.reflected_in_body:
+                        loc.append("body")
+                    if f.reflected_in_headers:
+                        loc.append(f"headers({', '.join(f.reflected_in_headers)})")
+                    override_info = f" (via {f.method_override_header})" if f.method_override_header else ""
+                    print(f"    {f.param_name}{override_info} -> reflected in {', '.join(loc)}")
+                    if args.verbose >= 1:
+                        print(f"        Canary: {f.canary}")
+            elif fat_get_reflected:
+                print(f"\n[*] {len(fat_get_reflected)} body params reflected (no significant diff):")
+                for f in fat_get_reflected:
+                    loc = []
+                    if f.reflected_in_body:
+                        loc.append("body")
+                    if f.reflected_in_headers:
+                        loc.append(f"headers({', '.join(f.reflected_in_headers)})")
+                    override_info = f" (via {f.method_override_header})" if f.method_override_header else ""
+                    print(f"    {f.param_name}{override_info} -> {', '.join(loc)}")
+            else:
+                print("\n[+] No fat GET reflection detected")
+
+            # Summary for fat GET
+            print(f"\nFat GET summary: {len(fat_get_params)} params tested, {len(fat_get_reflected)} reflected, {len(fat_get_significant)} vulnerable")
+
+        # WCD (Web Cache Deception) scan - only if enabled
+        wcd_findings = []
+        wcd_significant = []
+        wcd_cached = []
+        if args.wcd:
+            delimiters = get_path_delimiters()
+            extensions = get_static_extensions()
+            total_combos = len(delimiters) * len(extensions)
+            print(f"\nProbing {total_combos} path confusion combinations for WCD...")
+
+            wcd_findings = probe_wcd(
+                args.url,
+                baseline,
+                delimiters=delimiters,
+                extensions=extensions,
+                timeout=args.timeout,
+                insecure=args.insecure,
+            )
+
+            # Categorize WCD findings
+            wcd_significant = [f for f in wcd_findings if f.is_significant]
+            wcd_cached = [f for f in wcd_findings if f.second_request_hit]
+
+            # Report WCD findings
+            if wcd_significant:
+                print(f"\n[!] {len(wcd_significant)} WEB CACHE DECEPTION paths found:")
+                for f in wcd_significant:
+                    print(f"    {f.confused_path}")
+                    print(f"        delimiter: {repr(f.delimiter)}, extension: {f.extension}")
+                    if args.verbose >= 1:
+                        print(f"        cached: {f.second_request_hit}, content matches: {f.content_matches_baseline}")
+            elif wcd_cached:
+                print(f"\n[*] {len(wcd_cached)} paths cached (content mismatch):")
+                for f in wcd_cached:
+                    print(f"    {f.confused_path} (delimiter: {repr(f.delimiter)}, extension: {f.extension})")
+            else:
+                print("\n[+] No WCD vulnerabilities detected")
+
+            # Summary for WCD
+            print(f"\nWCD summary: {len(wcd_findings)} paths tested, {len(wcd_cached)} cached, {len(wcd_significant)} vulnerable")
+
         # Overall summary
-        total_significant = len(significant) + len(param_significant)
-        total_reflected = len(reflected) + len(param_reflected)
+        total_significant = len(significant) + len(param_significant) + len(fat_get_significant) + len(wcd_significant)
+        total_reflected = len(reflected) + len(param_reflected) + len(fat_get_reflected)
         print(f"\n--- Overall ---")
-        print(f"Total probes: {len(findings)} headers + {len(param_findings)} parameters = {len(findings) + len(param_findings)}")
-        print(f"Reflected: {total_reflected} ({len(reflected)} headers, {len(param_reflected)} parameters)")
-        print(f"Potentially vulnerable: {total_significant} ({len(significant)} headers, {len(param_significant)} parameters)")
+        total_probes = len(findings) + len(param_findings)
+        probe_breakdown = f"{len(findings)} headers + {len(param_findings)} parameters"
+        if args.fat_get:
+            total_probes += len(fat_get_findings)
+            probe_breakdown += f" + {len(fat_get_findings)} fat GET"
+        if args.wcd:
+            total_probes += len(wcd_findings)
+            probe_breakdown += f" + {len(wcd_findings)} WCD paths"
+        print(f"Total probes: {probe_breakdown} = {total_probes}")
+        reflected_breakdown = f"{len(reflected)} headers, {len(param_reflected)} parameters"
+        if args.fat_get:
+            reflected_breakdown += f", {len(fat_get_reflected)} fat GET"
+        print(f"Reflected: {total_reflected} ({reflected_breakdown})")
+        vuln_breakdown = f"{len(significant)} headers, {len(param_significant)} parameters"
+        if args.fat_get:
+            vuln_breakdown += f", {len(fat_get_significant)} fat GET"
+        if args.wcd:
+            vuln_breakdown += f", {len(wcd_significant)} WCD"
+        print(f"Potentially vulnerable: {total_significant} ({vuln_breakdown})")
 
         if args.verbose >= 1:
             print("\nResponse headers:")
