@@ -401,3 +401,62 @@ class TestWordlistCLI:
         parser = build_parser()
         args = parser.parse_args(["https://example.com"])
         assert args.wordlist is None
+
+
+class TestQuietModeCLI:
+    """Tests for -q/--quiet flag."""
+
+    def test_quiet_short_flag(self):
+        """The -q short flag should set quiet=True."""
+        parser = build_parser()
+        args = parser.parse_args(["-q", "https://example.com"])
+        assert args.quiet is True
+
+    def test_quiet_long_flag(self):
+        """The --quiet long flag should set quiet=True."""
+        parser = build_parser()
+        args = parser.parse_args(["--quiet", "https://example.com"])
+        assert args.quiet is True
+
+    def test_quiet_default_false(self):
+        """Quiet should default to False."""
+        parser = build_parser()
+        args = parser.parse_args(["https://example.com"])
+        assert args.quiet is False
+
+    def test_quiet_in_help(self):
+        """Help text should document the quiet flag."""
+        parser = build_parser()
+        help_text = parser.format_help()
+        assert "-q" in help_text
+        assert "--quiet" in help_text
+        assert "vulnerability findings" in help_text.lower() or "quiet" in help_text.lower()
+
+
+class TestJsonModeCLI:
+    """Tests for --json flag."""
+
+    def test_json_flag(self):
+        """The --json flag should set json=True."""
+        parser = build_parser()
+        args = parser.parse_args(["--json", "https://example.com"])
+        assert args.json is True
+
+    def test_json_default_false(self):
+        """JSON should default to False."""
+        parser = build_parser()
+        args = parser.parse_args(["https://example.com"])
+        assert args.json is False
+
+    def test_json_and_quiet_can_coexist(self):
+        """Both --json and --quiet can be specified (JSON takes precedence)."""
+        parser = build_parser()
+        args = parser.parse_args(["--json", "--quiet", "https://example.com"])
+        assert args.json is True
+        assert args.quiet is True
+
+    def test_json_in_help(self):
+        """Help text should document the json flag."""
+        parser = build_parser()
+        help_text = parser.format_help()
+        assert "--json" in help_text

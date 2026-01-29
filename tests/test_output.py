@@ -315,3 +315,233 @@ class TestAnsiConstants:
     def test_reset_code(self):
         """RESET should be ANSI code 0."""
         assert RESET == "\033[0m"
+
+
+class TestFindingMethod:
+    """Tests for finding() method."""
+
+    def test_finding_prints_in_normal_mode(self, capsys):
+        """finding() should print in NORMAL mode."""
+        with patch.dict(os.environ, {"NO_COLOR": "1"}, clear=False):
+            out = Output(OutputMode.NORMAL, 0)
+            out.finding("Header Poisoning", "X-Forwarded-Host", Severity.MEDIUM, "Reflected in body")
+            captured = capsys.readouterr()
+            assert "Header Poisoning" in captured.out
+            assert "X-Forwarded-Host" in captured.out
+            assert "[MEDIUM]" in captured.out
+            assert "Reflected in body" in captured.out
+
+    def test_finding_prints_in_quiet_mode(self, capsys):
+        """finding() should print in QUIET mode (that's what quiet is for)."""
+        with patch.dict(os.environ, {"NO_COLOR": "1"}, clear=False):
+            out = Output(OutputMode.QUIET, 0)
+            out.finding("Header Poisoning", "X-Test", Severity.HIGH, "Reflected in headers")
+            captured = capsys.readouterr()
+            assert "Header Poisoning" in captured.out
+            assert "X-Test" in captured.out
+            assert "[HIGH]" in captured.out
+
+    def test_finding_skipped_in_json_mode(self, capsys):
+        """finding() should NOT print in JSON mode."""
+        with patch.dict(os.environ, {"NO_COLOR": "1"}, clear=False):
+            out = Output(OutputMode.JSON, 0)
+            out.finding("Header Poisoning", "X-Test", Severity.CRITICAL, "Reflected")
+            captured = capsys.readouterr()
+            assert captured.out == ""
+
+    def test_finding_with_extra_dict(self, capsys):
+        """finding() should print extra key-value pairs."""
+        with patch.dict(os.environ, {"NO_COLOR": "1"}, clear=False):
+            out = Output(OutputMode.NORMAL, 0)
+            out.finding(
+                "Header Poisoning",
+                "X-Host",
+                Severity.MEDIUM,
+                "Reflected in body",
+                extra={"canary": "venom-abc123"},
+            )
+            captured = capsys.readouterr()
+            assert "canary: venom-abc123" in captured.out
+
+    def test_finding_with_color(self, capsys):
+        """finding() should colorize severity when colors enabled."""
+        with patch.dict(os.environ, {"NO_COLOR": "", "FORCE_COLOR": "1"}, clear=False):
+            out = Output(OutputMode.NORMAL, 0)
+            out.finding("Test", "test", Severity.HIGH, "details")
+            captured = capsys.readouterr()
+            assert RED in captured.out
+            assert RESET in captured.out
+
+
+class TestQuietModeBehavior:
+    """Tests for quiet mode behavior across methods."""
+
+    def test_info_skipped_in_quiet_mode(self, capsys):
+        """info() should be skipped in QUIET mode."""
+        out = Output(OutputMode.QUIET, 0)
+        out.info("This should not print")
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_status_skipped_in_quiet_mode(self, capsys):
+        """status() should be skipped in QUIET mode."""
+        out = Output(OutputMode.QUIET, 0)
+        out.status("This should not print")
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_success_skipped_in_quiet_mode(self, capsys):
+        """success() should be skipped in QUIET mode."""
+        out = Output(OutputMode.QUIET, 0)
+        out.success("This should not print")
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_summary_skipped_in_quiet_mode(self, capsys):
+        """summary() should be skipped in QUIET mode."""
+        out = Output(OutputMode.QUIET, 0)
+        out.summary("This should not print")
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_section_skipped_in_quiet_mode(self, capsys):
+        """section() should be skipped in QUIET mode."""
+        out = Output(OutputMode.QUIET, 0)
+        out.section("This should not print")
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_error_prints_in_quiet_mode(self, capsys):
+        """error() should always print to stderr, even in QUIET mode."""
+        out = Output(OutputMode.QUIET, 0)
+        out.error("Error message")
+        captured = capsys.readouterr()
+        assert "Error message" in captured.err
+
+
+class TestNormalModeOutput:
+    """Tests for normal mode output behavior."""
+
+    def test_info_prints_in_normal_mode(self, capsys):
+        """info() should print in NORMAL mode."""
+        out = Output(OutputMode.NORMAL, 0)
+        out.info("Info message")
+        captured = capsys.readouterr()
+        assert "Info message" in captured.out
+
+    def test_status_prints_in_normal_mode(self, capsys):
+        """status() should print in NORMAL mode."""
+        out = Output(OutputMode.NORMAL, 0)
+        out.status("Status update")
+        captured = capsys.readouterr()
+        assert "Status update" in captured.out
+
+    def test_success_prints_in_normal_mode(self, capsys):
+        """success() should print in NORMAL mode."""
+        out = Output(OutputMode.NORMAL, 0)
+        out.success("Success!")
+        captured = capsys.readouterr()
+        assert "Success!" in captured.out
+
+    def test_summary_prints_in_normal_mode(self, capsys):
+        """summary() should print in NORMAL mode."""
+        out = Output(OutputMode.NORMAL, 0)
+        out.summary("5 headers tested")
+        captured = capsys.readouterr()
+        assert "5 headers tested" in captured.out
+
+    def test_section_prints_in_normal_mode(self, capsys):
+        """section() should print in NORMAL mode."""
+        out = Output(OutputMode.NORMAL, 0)
+        out.section("Header Scan")
+        captured = capsys.readouterr()
+        assert "=== Header Scan ===" in captured.out
+
+
+class TestJsonModeOutput:
+    """Tests for JSON mode output suppression."""
+
+    def test_info_skipped_in_json_mode(self, capsys):
+        """info() should be skipped in JSON mode."""
+        out = Output(OutputMode.JSON, 0)
+        out.info("This should not print")
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_status_skipped_in_json_mode(self, capsys):
+        """status() should be skipped in JSON mode."""
+        out = Output(OutputMode.JSON, 0)
+        out.status("This should not print")
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_summary_skipped_in_json_mode(self, capsys):
+        """summary() should be skipped in JSON mode."""
+        out = Output(OutputMode.JSON, 0)
+        out.summary("This should not print")
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_section_skipped_in_json_mode(self, capsys):
+        """section() should be skipped in JSON mode."""
+        out = Output(OutputMode.JSON, 0)
+        out.section("This should not print")
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+
+class TestDebugMethod:
+    """Tests for debug() method."""
+
+    def test_debug_skipped_at_verbosity_0(self, capsys):
+        """debug() should be skipped when verbosity is 0."""
+        out = Output(OutputMode.NORMAL, 0)
+        out.debug("Debug message")
+        captured = capsys.readouterr()
+        assert captured.err == ""
+
+    def test_debug_prints_at_verbosity_1(self, capsys):
+        """debug() should print at verbosity 1."""
+        out = Output(OutputMode.NORMAL, 1)
+        out.debug("Debug message")
+        captured = capsys.readouterr()
+        assert "Debug message" in captured.err
+
+    def test_debug_goes_to_stderr(self, capsys):
+        """debug() output should go to stderr."""
+        out = Output(OutputMode.NORMAL, 1)
+        out.debug("Debug message")
+        captured = capsys.readouterr()
+        assert "Debug message" in captured.err
+        assert captured.out == ""
+
+    def test_debug_respects_level_parameter(self, capsys):
+        """debug() should respect the level parameter."""
+        out = Output(OutputMode.NORMAL, 1)
+        out.debug("Level 2 debug", level=2)
+        captured = capsys.readouterr()
+        assert captured.err == ""
+
+        out = Output(OutputMode.NORMAL, 2)
+        out.debug("Level 2 debug", level=2)
+        captured = capsys.readouterr()
+        assert "Level 2 debug" in captured.err
+
+
+class TestErrorMethod:
+    """Tests for error() method."""
+
+    def test_error_always_prints_to_stderr(self, capsys):
+        """error() should always print to stderr."""
+        out = Output(OutputMode.NORMAL, 0)
+        out.error("Error message")
+        captured = capsys.readouterr()
+        assert "Error message" in captured.err
+        assert captured.out == ""
+
+    def test_error_prints_in_json_mode(self, capsys):
+        """error() should print even in JSON mode."""
+        out = Output(OutputMode.JSON, 0)
+        out.error("Error message")
+        captured = capsys.readouterr()
+        assert "Error message" in captured.err
