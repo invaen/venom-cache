@@ -35,12 +35,24 @@ Examples:
   %(prog)s --timeout 30 https://target.com
   %(prog)s --insecure https://self-signed.target.com
   %(prog)s -v https://target.com
+  %(prog)s -f urls.txt
+  cat urls.txt | %(prog)s -f -
         """,
     )
 
     parser.add_argument(
         "url",
+        nargs="?",
+        default=None,
         help="Target URL to scan (must start with http:// or https://)",
+    )
+
+    parser.add_argument(
+        "-f",
+        "--file",
+        type=argparse.FileType("r"),
+        metavar="FILE",
+        help="File containing URLs to scan (one per line, use - for stdin)",
     )
 
     parser.add_argument(
@@ -85,20 +97,54 @@ Examples:
     return parser
 
 
-def main() -> int:
-    """Main entry point for venom-cache CLI."""
-    parser = build_parser()
-    args = parser.parse_args()
+def get_target_urls(args: argparse.Namespace) -> list[str]:
+    """Extract target URLs from command line arguments.
 
-    # Handle --all flag to enable all detection modes
-    if args.all:
-        args.wcd = True
-        args.fat_get = True
+    Args:
+        args: Parsed command line arguments
 
+    Returns:
+        List of URLs to scan
+
+    Raises:
+        ValueError: If neither URL nor file input provided
+    """
+    urls = []
+
+    if args.url:
+        urls.append(args.url)
+
+    if args.file:
+        try:
+            for line in args.file:
+                line = line.strip()
+                # Skip empty lines and comments
+                if not line or line.startswith("#"):
+                    continue
+                urls.append(line)
+        finally:
+            args.file.close()
+
+    if not urls:
+        raise ValueError("Error: Provide a URL or use -f/--file to specify a URL file")
+
+    return urls
+
+
+def scan_url(url: str, args: argparse.Namespace) -> int:
+    """Scan a single URL for cache poisoning vulnerabilities.
+
+    Args:
+        url: Target URL to scan
+        args: Parsed command line arguments
+
+    Returns:
+        0 on success, 1 on error
+    """
     # Validate URL scheme
-    if not args.url.startswith(("http://", "https://")):
+    if not url.startswith(("http://", "https://")):
         print(
-            f"Error: URL must start with http:// or https:// (got: {args.url})",
+            f"Error: URL must start with http:// or https:// (got: {url})",
             file=sys.stderr,
         )
         return 1
@@ -106,7 +152,7 @@ def main() -> int:
     # Verify cache buster isolation FIRST
     print("Verifying cache buster isolation...")
     is_safe, message = verify_cache_buster_isolation(
-        args.url, args.timeout, args.insecure
+        url, args.timeout, args.insecure
     )
     if not is_safe:
         print(f"ERROR: {message}", file=sys.stderr)
@@ -119,12 +165,12 @@ def main() -> int:
         print(f"OK: {message}")
 
     # Proceed with scanning
-    print(f"\nScanning {args.url}...")
+    print(f"\nScanning {url}...")
 
     try:
         # Establish baseline and check response stability
         baseline, diff, is_stable = check_response_stability(
-            args.url,
+            url,
             timeout=args.timeout,
             insecure=args.insecure,
         )
@@ -168,7 +214,7 @@ def main() -> int:
         print(f"\nProbing {len(wordlist)} headers for reflection...")
 
         findings = probe_headers(
-            args.url,
+            url,
             wordlist,
             timeout=args.timeout,
             insecure=args.insecure,
@@ -211,7 +257,7 @@ def main() -> int:
         print(f"\nProbing {len(param_wordlist)} parameters for reflection...")
 
         param_findings = probe_params(
-            args.url,
+            url,
             param_wordlist,
             timeout=args.timeout,
             insecure=args.insecure,
@@ -259,7 +305,7 @@ def main() -> int:
             print(f"\nProbing {len(fat_get_params)} body parameters for fat GET...")
 
             fat_get_findings = probe_all_fat_get(
-                args.url,
+                url,
                 fat_get_params,
                 method_override_headers,
                 timeout=args.timeout,
@@ -311,7 +357,7 @@ def main() -> int:
             print(f"\nProbing {total_combos} path confusion combinations for WCD...")
 
             wcd_findings = probe_wcd(
-                args.url,
+                url,
                 baseline,
                 delimiters=delimiters,
                 extensions=extensions,
@@ -398,6 +444,54 @@ def main() -> int:
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+
+
+def main() -> int:
+    """Main entry point for venom-cache CLI."""
+    parser = build_parser()
+    args = parser.parse_args()
+
+    # Handle --all flag to enable all detection modes
+    if args.all:
+        args.wcd = True
+        args.fat_get = True
+
+    # Get target URLs from either positional arg or file
+    try:
+        urls = get_target_urls(args)
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+
+    # Batch scanning
+    total_urls = len(urls)
+    success_count = 0
+    failure_count = 0
+
+    for i, url in enumerate(urls, 1):
+        if total_urls > 1:
+            print(f"\n{'=' * 60}")
+            print(f"Scanning URL {i} of {total_urls}: {url}")
+            print("=" * 60)
+
+        result = scan_url(url, args)
+
+        if result == 0:
+            success_count += 1
+        else:
+            failure_count += 1
+
+    # Batch summary if multiple URLs
+    if total_urls > 1:
+        print(f"\n{'=' * 60}")
+        print("BATCH SUMMARY")
+        print("=" * 60)
+        print(f"URLs scanned: {total_urls}")
+        print(f"Successful: {success_count}")
+        print(f"Failed: {failure_count}")
+
+    # Return 0 if any succeeded, 1 if all failed
+    return 0 if success_count > 0 else 1
 
 
 if __name__ == "__main__":
