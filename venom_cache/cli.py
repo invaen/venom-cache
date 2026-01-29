@@ -1,7 +1,11 @@
 """Command-line interface for venom-cache."""
 
 import argparse
+import socket
+import ssl
 import sys
+
+from venom_cache.http_transport import make_request
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -61,11 +65,51 @@ def main() -> int:
         )
         return 1
 
-    # Placeholder output until HTTP transport is implemented
     print(f"Scanning {args.url}...")
-    print("HTTP transport not yet implemented")
 
-    return 0
+    try:
+        status, headers, body = make_request(
+            args.url,
+            timeout=args.timeout,
+            insecure=args.insecure,
+        )
+
+        print(f"Status: {status}")
+        print(f"Response size: {len(body)} bytes")
+
+        if args.verbose >= 1:
+            print("\nResponse headers:")
+            for name, value in headers.items():
+                print(f"  {name}: {value}")
+
+        return 0
+
+    except ssl.SSLCertVerificationError:
+        print(
+            "Error: SSL certificate verification failed (use --insecure to skip)",
+            file=sys.stderr,
+        )
+        return 1
+
+    except socket.timeout:
+        print("Error: Request timed out", file=sys.stderr)
+        return 1
+
+    except ConnectionRefusedError:
+        print("Error: Connection refused", file=sys.stderr)
+        return 1
+
+    except socket.gaierror as e:
+        print(f"Error: Could not resolve hostname ({e})", file=sys.stderr)
+        return 1
+
+    except OSError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
