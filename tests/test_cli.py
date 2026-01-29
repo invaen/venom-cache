@@ -641,3 +641,176 @@ class TestJsonOutputIntegration:
         assert len(data["findings"]) == 1
         assert data["findings"][0]["header_name"] == "X-Forwarded-Host"
         assert data["findings"][0]["finding_type"] == "header_poisoning"
+
+
+class TestFindingOutputBehavior:
+    """Tests for finding display behavior with severity labels."""
+
+    def test_quiet_mode_shows_findings(self):
+        """Quiet mode should show vulnerability findings via out.finding()."""
+        from io import StringIO
+        from venom_cache.output import Output, OutputMode, Severity
+
+        out = Output(OutputMode.QUIET, 0)
+
+        # Capture stdout
+        captured = StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+
+        # Info should be suppressed in quiet mode
+        out.info("This should not appear")
+
+        # Findings should still appear
+        out.finding(
+            finding_type="Header Poisoning",
+            name="X-Forwarded-Host",
+            severity=Severity.MEDIUM,
+            details="Reflected in body",
+        )
+
+        sys.stdout = old_stdout
+        output = captured.getvalue()
+
+        # Finding should be visible
+        assert "[MEDIUM]" in output
+        assert "Header Poisoning" in output
+        assert "X-Forwarded-Host" in output
+        # Info should not appear
+        assert "This should not appear" not in output
+
+    def test_findings_have_severity_labels(self):
+        """Findings should display with [MEDIUM]/[HIGH] severity labels."""
+        from io import StringIO
+        from venom_cache.output import Output, OutputMode, Severity
+
+        out = Output(OutputMode.NORMAL, 0)
+
+        # Capture stdout
+        captured = StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+
+        # Test MEDIUM severity
+        out.finding(
+            finding_type="Header Poisoning",
+            name="X-Test",
+            severity=Severity.MEDIUM,
+            details="Test details",
+        )
+
+        # Test HIGH severity
+        out.finding(
+            finding_type="Web Cache Deception",
+            name="/path.css",
+            severity=Severity.HIGH,
+            details="Vulnerable path",
+        )
+
+        sys.stdout = old_stdout
+        output = captured.getvalue()
+
+        # Severity labels should appear
+        assert "[MEDIUM]" in output
+        assert "[HIGH]" in output
+        # Old markers should NOT be used
+        assert "[!]" not in output
+        assert "[*]" not in output
+        assert "[+]" not in output
+
+    def test_verbose_mode_shows_debug_output(self):
+        """Verbose mode should show debug information on stderr."""
+        from io import StringIO
+        from venom_cache.output import Output, OutputMode
+
+        out = Output(OutputMode.NORMAL, 1)  # Verbosity level 1
+
+        # Capture stderr
+        captured_stderr = StringIO()
+        old_stderr = sys.stderr
+        sys.stderr = captured_stderr
+
+        out.debug("Debug: Header probe results", level=1)
+        out.debug("Debug: Detailed info", level=2)  # Should not appear at level 1
+
+        sys.stderr = old_stderr
+        output = captured_stderr.getvalue()
+
+        # Level 1 debug should appear
+        assert "Header probe results" in output
+        # Level 2 debug should not appear at verbosity 1
+        assert "Detailed info" not in output
+
+    def test_verbose_level_2_shows_detailed_debug(self):
+        """Verbosity level 2 should show all debug messages."""
+        from io import StringIO
+        from venom_cache.output import Output, OutputMode
+
+        out = Output(OutputMode.NORMAL, 2)  # Verbosity level 2
+
+        # Capture stderr
+        captured_stderr = StringIO()
+        old_stderr = sys.stderr
+        sys.stderr = captured_stderr
+
+        out.debug("Debug: High level", level=1)
+        out.debug("Debug: Detailed", level=2)
+
+        sys.stderr = old_stderr
+        output = captured_stderr.getvalue()
+
+        # Both levels should appear
+        assert "High level" in output
+        assert "Detailed" in output
+
+    def test_finding_with_extra_info(self):
+        """Finding with extra dict should display additional key-value pairs."""
+        from io import StringIO
+        from venom_cache.output import Output, OutputMode, Severity
+
+        out = Output(OutputMode.NORMAL, 0)
+
+        # Capture stdout
+        captured = StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+
+        out.finding(
+            finding_type="Header Poisoning",
+            name="X-Test",
+            severity=Severity.MEDIUM,
+            details="Reflected in body",
+            extra={"canary": "venom-abc123"},
+        )
+
+        sys.stdout = old_stdout
+        output = captured.getvalue()
+
+        # Extra info should be displayed
+        assert "canary" in output
+        assert "venom-abc123" in output
+
+    def test_low_severity_findings(self):
+        """LOW severity findings should display with [LOW] label."""
+        from io import StringIO
+        from venom_cache.output import Output, OutputMode, Severity
+
+        out = Output(OutputMode.NORMAL, 0)
+
+        # Capture stdout
+        captured = StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+
+        out.finding(
+            finding_type="Header Reflection",
+            name="X-Test",
+            severity=Severity.LOW,
+            details="Reflected but no significant diff",
+        )
+
+        sys.stdout = old_stdout
+        output = captured.getvalue()
+
+        assert "[LOW]" in output
+        assert "Header Reflection" in output
