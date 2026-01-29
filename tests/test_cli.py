@@ -7,7 +7,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from venom_cache.cli import build_parser, get_target_urls
+from venom_cache.cli import (
+    build_parser,
+    build_request_headers,
+    get_target_urls,
+    parse_cookie,
+    parse_header,
+)
 
 
 class TestBuildParser:
@@ -192,3 +198,151 @@ class TestStdinSupport:
         # FileType instances don't compare equal, so check the type and mode
         assert isinstance(file_action.type, type(argparse.FileType("r")))
         assert file_action.type._mode == "r"
+
+
+class TestParseHeader:
+    """Tests for parse_header() type converter."""
+
+    def test_parse_header_valid(self):
+        """Valid 'Name: Value' should return tuple."""
+        result = parse_header("X-Custom: test-value")
+        assert result == ("X-Custom", "test-value")
+
+    def test_parse_header_with_spaces(self):
+        """Leading/trailing whitespace should be stripped."""
+        result = parse_header(" Name : Value ")
+        assert result == ("Name", "Value")
+
+    def test_parse_header_colon_in_value(self):
+        """Colons in value should be preserved."""
+        result = parse_header("Host: example.com:8080")
+        assert result == ("Host", "example.com:8080")
+
+    def test_parse_header_multiple_colons(self):
+        """Multiple colons: split on first only."""
+        result = parse_header("Name: a:b:c")
+        assert result == ("Name", "a:b:c")
+
+    def test_parse_header_no_colon_raises(self):
+        """Missing colon should raise ArgumentTypeError."""
+        with pytest.raises(argparse.ArgumentTypeError) as exc_info:
+            parse_header("InvalidHeader")
+        assert "Invalid header format" in str(exc_info.value)
+        assert "expected 'Name: Value'" in str(exc_info.value)
+
+    def test_parse_header_empty_value(self):
+        """Empty value after colon is valid."""
+        result = parse_header("X-Empty:")
+        assert result == ("X-Empty", "")
+
+
+class TestParseCookie:
+    """Tests for parse_cookie() type converter."""
+
+    def test_parse_cookie_valid(self):
+        """Valid 'name=value' should return tuple."""
+        result = parse_cookie("session=abc123")
+        assert result == ("session", "abc123")
+
+    def test_parse_cookie_equals_in_value(self):
+        """Equals signs in value should be preserved."""
+        result = parse_cookie("token=a=b=c")
+        assert result == ("token", "a=b=c")
+
+    def test_parse_cookie_with_spaces(self):
+        """Leading/trailing whitespace should be stripped."""
+        result = parse_cookie(" name = value ")
+        assert result == ("name", "value")
+
+    def test_parse_cookie_no_equals_raises(self):
+        """Missing equals should raise ArgumentTypeError."""
+        with pytest.raises(argparse.ArgumentTypeError) as exc_info:
+            parse_cookie("invalid")
+        assert "Invalid cookie format" in str(exc_info.value)
+        assert "expected 'name=value'" in str(exc_info.value)
+
+    def test_parse_cookie_empty_value(self):
+        """Empty value after equals is valid."""
+        result = parse_cookie("empty=")
+        assert result == ("empty", "")
+
+
+class TestBuildRequestHeaders:
+    """Tests for build_request_headers() helper."""
+
+    def test_build_headers_from_list(self):
+        """List of tuples should convert to dict."""
+        headers = build_request_headers(
+            [("X-Custom", "value1"), ("X-Another", "value2")],
+            [],
+        )
+        assert headers == {"X-Custom": "value1", "X-Another": "value2"}
+
+    def test_build_headers_with_cookies(self):
+        """Cookies should be combined into Cookie header."""
+        headers = build_request_headers(
+            [],
+            [("session", "abc123"), ("user", "john")],
+        )
+        assert headers == {"Cookie": "session=abc123; user=john"}
+
+    def test_build_headers_empty(self):
+        """Empty inputs should return empty dict."""
+        headers = build_request_headers([], [])
+        assert headers == {}
+
+    def test_build_headers_combined(self):
+        """Both headers and cookies should be combined."""
+        headers = build_request_headers(
+            [("X-API-Key", "secret")],
+            [("session", "xyz")],
+        )
+        assert headers == {"X-API-Key": "secret", "Cookie": "session=xyz"}
+
+
+class TestHeaderAndCookieCLI:
+    """Tests for CLI integration of header and cookie flags."""
+
+    def test_header_flag_parses(self):
+        """The -H flag should parse headers into list of tuples."""
+        parser = build_parser()
+        args = parser.parse_args(["-H", "X-Test: value", "https://example.com"])
+        assert args.headers == [("X-Test", "value")]
+
+    def test_cookie_flag_parses(self):
+        """The -c flag should parse cookies into list of tuples."""
+        parser = build_parser()
+        args = parser.parse_args(["-c", "session=abc", "https://example.com"])
+        assert args.cookies == [("session", "abc")]
+
+    def test_multiple_headers(self):
+        """Multiple -H flags should collect all headers."""
+        parser = build_parser()
+        args = parser.parse_args([
+            "-H", "X-First: 1",
+            "-H", "X-Second: 2",
+            "https://example.com",
+        ])
+        assert args.headers == [("X-First", "1"), ("X-Second", "2")]
+
+    def test_multiple_cookies(self):
+        """Multiple -c flags should collect all cookies."""
+        parser = build_parser()
+        args = parser.parse_args([
+            "-c", "a=1",
+            "-c", "b=2",
+            "https://example.com",
+        ])
+        assert args.cookies == [("a", "1"), ("b", "2")]
+
+    def test_default_empty_headers(self):
+        """Default headers should be empty list."""
+        parser = build_parser()
+        args = parser.parse_args(["https://example.com"])
+        assert args.headers == []
+
+    def test_default_empty_cookies(self):
+        """Default cookies should be empty list."""
+        parser = build_parser()
+        args = parser.parse_args(["https://example.com"])
+        assert args.cookies == []
