@@ -879,3 +879,64 @@ class TestDelayCLI:
         assert args.delay == 1.0
         assert args.timeout == 30.0
         assert args.verbose == 1
+
+
+class TestConfirmCLI:
+    """Tests for --confirm flag (SAFE-04)."""
+
+    def test_confirm_default(self):
+        """Default confirm should be False."""
+        parser = build_parser()
+        args = parser.parse_args(["https://example.com"])
+        assert args.confirm is False
+
+    def test_confirm_enabled(self):
+        """--confirm flag should set confirm=True."""
+        parser = build_parser()
+        args = parser.parse_args(["--confirm", "https://example.com"])
+        assert args.confirm is True
+
+    def test_confirm_with_delay(self):
+        """--confirm can combine with --delay."""
+        parser = build_parser()
+        args = parser.parse_args(["--confirm", "--delay", "1.0", "https://example.com"])
+        assert args.confirm is True
+        assert args.delay == 1.0
+
+    def test_confirm_with_all(self):
+        """--confirm can combine with --all."""
+        parser = build_parser()
+        args = parser.parse_args(["--confirm", "--all", "https://example.com"])
+        assert args.confirm is True
+
+    def test_confirm_with_verbose(self):
+        """--confirm can combine with verbose flags."""
+        parser = build_parser()
+        args = parser.parse_args(["--confirm", "-vv", "https://example.com"])
+        assert args.confirm is True
+        assert args.verbose == 2
+
+    def test_confirm_in_help(self):
+        """Help text should document the --confirm flag with warning."""
+        parser = build_parser()
+        help_text = parser.format_help()
+        assert "--confirm" in help_text
+        assert "WARNING" in help_text
+        assert "shared cache" in help_text.lower()
+
+    def test_confirm_with_multiple_flags(self):
+        """--confirm should work with multiple other flags."""
+        parser = build_parser()
+        args = parser.parse_args([
+            "--confirm",
+            "--delay", "0.5",
+            "--timeout", "15",
+            "--insecure",
+            "-v",
+            "https://example.com",
+        ])
+        assert args.confirm is True
+        assert args.delay == 0.5
+        assert args.timeout == 15.0
+        assert args.insecure is True
+        assert args.verbose == 1
