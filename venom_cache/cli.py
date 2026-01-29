@@ -5,6 +5,7 @@ import socket
 import ssl
 import sys
 
+from venom_cache.cache_buster import verify_cache_buster_isolation
 from venom_cache.http_transport import make_request
 
 
@@ -65,7 +66,23 @@ def main() -> int:
         )
         return 1
 
-    print(f"Scanning {args.url}...")
+    # Verify cache buster isolation FIRST
+    print("Verifying cache buster isolation...")
+    is_safe, message = verify_cache_buster_isolation(
+        args.url, args.timeout, args.insecure
+    )
+    if not is_safe:
+        print(f"ERROR: {message}", file=sys.stderr)
+        print(
+            "Cache buster isolation is required for safe operation. Aborting.",
+            file=sys.stderr,
+        )
+        return 1
+    if args.verbose >= 1:
+        print(f"OK: {message}")
+
+    # Proceed with scanning
+    print(f"\nScanning {args.url}...")
 
     try:
         status, headers, body = make_request(
