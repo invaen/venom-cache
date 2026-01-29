@@ -65,3 +65,59 @@ def get_header_wordlist() -> List[str]:
         Copy of the UNKEYED_HEADERS list (safe to modify)
     """
     return UNKEYED_HEADERS.copy()
+
+
+# Query parameters commonly excluded from cache keys (unkeyed parameters)
+# These are potential cache poisoning vectors
+UNKEYED_PARAMS: List[str] = [
+    # UTM parameters (Google Analytics / marketing)
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_content",
+    "utm_term",
+    "utm_expid",
+    # Facebook tracking
+    "fbclid",
+    "fb_action_ids",
+    "fb_action_types",
+    "fb_source",
+    # Google tracking
+    "gclid",
+    "dclid",
+    "_ga",
+    # Marketing automation
+    "mc_cid",
+    "mc_eid",
+    "mkt_tok",
+    # Other analytics/tracking
+    "epik",
+    "_ke",
+    "ck_subscriber_id",
+    "campaignid",
+    "adgroupid",
+    # JSONP callback parameters
+    "callback",
+    "jsonp",
+    "cb",
+    "_callback",
+    "jsonpcallback",
+    # Debug/test parameters
+    "debug",
+    "test",
+    "dev",
+    # Referrer/source tracking
+    "ref",
+    "source",
+    "affiliate",
+    "partner",
+]
+
+
+def get_param_wordlist() -> List[str]:
+    """Return the default list of parameters to probe for cache poisoning.
+
+    Returns:
+        Copy of the UNKEYED_PARAMS list (safe to modify)
+    """
+    return UNKEYED_PARAMS.copy()
