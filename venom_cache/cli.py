@@ -4,6 +4,7 @@ import argparse
 import socket
 import ssl
 import sys
+from typing import Tuple
 
 from venom_cache.baseline import check_response_stability
 from venom_cache.cache_buster import verify_cache_buster_isolation
@@ -21,6 +22,69 @@ from venom_cache.wordlists import (
     get_path_delimiters,
     get_static_extensions,
 )
+
+
+def parse_header(header_string: str) -> Tuple[str, str]:
+    """Parse 'Name: Value' header format.
+
+    Args:
+        header_string: Header in 'Name: Value' format
+
+    Returns:
+        Tuple of (name, value) with whitespace stripped
+
+    Raises:
+        argparse.ArgumentTypeError: If format is invalid (no colon)
+    """
+    if ":" not in header_string:
+        raise argparse.ArgumentTypeError(
+            f"Invalid header format '{header_string}' - expected 'Name: Value'"
+        )
+    name, value = header_string.split(":", 1)
+    return (name.strip(), value.strip())
+
+
+def parse_cookie(cookie_string: str) -> Tuple[str, str]:
+    """Parse 'name=value' cookie format.
+
+    Args:
+        cookie_string: Cookie in 'name=value' format
+
+    Returns:
+        Tuple of (name, value) with whitespace stripped
+
+    Raises:
+        argparse.ArgumentTypeError: If format is invalid (no equals)
+    """
+    if "=" not in cookie_string:
+        raise argparse.ArgumentTypeError(
+            f"Invalid cookie format '{cookie_string}' - expected 'name=value'"
+        )
+    # Split on first = only to handle values containing =
+    name, value = cookie_string.split("=", 1)
+    return (name.strip(), value.strip())
+
+
+def build_request_headers(
+    custom_headers: list,
+    cookies: list,
+) -> dict:
+    """Build headers dict from custom headers and cookies.
+
+    Args:
+        custom_headers: List of (name, value) tuples for headers
+        cookies: List of (name, value) tuples for cookies
+
+    Returns:
+        Dictionary of headers ready for HTTP request
+    """
+    headers = {}
+    for name, value in custom_headers:
+        headers[name] = value
+    if cookies:
+        cookie_str = "; ".join(f"{n}={v}" for n, v in cookies)
+        headers["Cookie"] = cookie_str
+    return headers
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -92,6 +156,28 @@ Examples:
         "--all",
         action="store_true",
         help="Enable all detection techniques (headers, params, fat-get, wcd)",
+    )
+
+    parser.add_argument(
+        "-H",
+        "--header",
+        action="append",
+        type=parse_header,
+        dest="headers",
+        default=[],
+        metavar="HEADER",
+        help="Custom header 'Name: Value' (repeatable)",
+    )
+
+    parser.add_argument(
+        "-c",
+        "--cookie",
+        action="append",
+        type=parse_cookie,
+        dest="cookies",
+        default=[],
+        metavar="COOKIE",
+        help="Cookie 'name=value' (repeatable)",
     )
 
     return parser
