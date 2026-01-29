@@ -1,6 +1,7 @@
 """Built-in wordlists for cache poisoning detection."""
 
-from typing import List
+import pathlib
+from typing import List, Optional
 
 # Headers commonly excluded from cache keys (unkeyed headers)
 # These are potential cache poisoning vectors
@@ -220,3 +221,49 @@ def get_method_override_headers() -> List[str]:
         Copy of the METHOD_OVERRIDE_HEADERS list (safe to modify)
     """
     return METHOD_OVERRIDE_HEADERS.copy()
+
+
+def load_wordlist_from_file(filepath: str) -> List[str]:
+    """Load wordlist from file, one entry per line.
+
+    Args:
+        filepath: Path to wordlist file
+
+    Returns:
+        List of entries (stripped, non-empty, non-comment lines)
+
+    Raises:
+        FileNotFoundError: If file does not exist
+        ValueError: If file is empty after filtering or not a file
+    """
+    path = pathlib.Path(filepath)
+    if not path.exists():
+        raise FileNotFoundError(f"Wordlist not found: {filepath}")
+    if not path.is_file():
+        raise ValueError(f"Not a file: {filepath}")
+
+    entries = []
+    with path.open("r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                entries.append(line)
+
+    if not entries:
+        raise ValueError(f"Wordlist is empty: {filepath}")
+
+    return entries
+
+
+def get_header_wordlist_with_custom(custom_path: Optional[str] = None) -> List[str]:
+    """Get header wordlist - custom if specified, otherwise built-in.
+
+    Args:
+        custom_path: Optional path to custom wordlist file
+
+    Returns:
+        List of header names to probe
+    """
+    if custom_path:
+        return load_wordlist_from_file(custom_path)
+    return get_header_wordlist()
