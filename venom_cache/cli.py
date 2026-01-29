@@ -8,7 +8,9 @@ import sys
 from venom_cache.baseline import check_response_stability
 from venom_cache.cache_buster import verify_cache_buster_isolation
 from venom_cache.cache_detector import detect_cache_headers, get_cache_info
+from venom_cache.header_prober import probe_headers
 from venom_cache.http_transport import make_request
+from venom_cache.wordlists import get_header_wordlist
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -128,6 +130,50 @@ def main() -> int:
             print(f"  Body: {baseline.body_length} -> {baseline.body_length + diff.content_length_delta} bytes ({diff.content_length_delta:+d})")
             print(f"  Static content: {'changed' if diff.static_body_changed else 'identical'}")
 
+        # Header poisoning scan
+        wordlist = get_header_wordlist()
+        print(f"\nProbing {len(wordlist)} headers for reflection...")
+
+        findings = probe_headers(
+            args.url,
+            wordlist,
+            timeout=args.timeout,
+            insecure=args.insecure,
+            baseline=baseline,
+        )
+
+        # Categorize findings
+        significant = [f for f in findings if f.is_significant]
+        reflected = [f for f in findings if f.reflected_in_body or f.reflected_in_headers]
+
+        # Report findings
+        if significant:
+            print(f"\n[!] {len(significant)} POTENTIALLY VULNERABLE headers found:")
+            for f in significant:
+                loc = []
+                if f.reflected_in_body:
+                    loc.append("body")
+                if f.reflected_in_headers:
+                    loc.append(f"headers({', '.join(f.reflected_in_headers)})")
+                print(f"    {f.header_name} -> reflected in {', '.join(loc)}")
+                if args.verbose >= 1:
+                    print(f"        Canary: {f.canary}")
+        elif reflected:
+            print(f"\n[*] {len(reflected)} headers reflected (no significant diff):")
+            for f in reflected:
+                loc = []
+                if f.reflected_in_body:
+                    loc.append("body")
+                if f.reflected_in_headers:
+                    loc.append(f"headers({', '.join(f.reflected_in_headers)})")
+                print(f"    {f.header_name} -> {', '.join(loc)}")
+        else:
+            print("\n[+] No header reflection detected")
+
+        # Summary
+        print(f"\nSummary: {len(findings)} headers tested, {len(reflected)} reflected, {len(significant)} potentially vulnerable")
+
+        if args.verbose >= 1:
             print("\nResponse headers:")
             for name, value in baseline.headers.items():
                 print(f"  {name}: {value}")
