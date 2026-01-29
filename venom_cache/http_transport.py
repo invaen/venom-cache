@@ -6,6 +6,7 @@ from typing import Dict, Optional, Tuple
 from urllib.parse import urlparse
 
 from venom_cache.cache_buster import inject_cache_buster
+from venom_cache.rate_limiter import rate_limit
 
 
 class TargetConnection:
@@ -84,6 +85,9 @@ class TargetConnection:
         Returns:
             Tuple of (status_code, response_headers, body)
         """
+        # Apply rate limiting before making request
+        rate_limit()
+
         if path is None:
             path = self.path
 

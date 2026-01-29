@@ -10,6 +10,7 @@ from typing import Tuple
 from venom_cache.baseline import check_response_stability
 from venom_cache.cache_buster import verify_cache_buster_isolation
 from venom_cache.cache_detector import detect_cache_headers, get_cache_info
+from venom_cache.confirm import confirm_header_poisoning, confirm_param_poisoning
 from venom_cache.fat_get_prober import probe_all_fat_get
 from venom_cache.header_prober import probe_headers
 from venom_cache.http_transport import make_request
@@ -222,6 +223,20 @@ Examples:
         "--json",
         action="store_true",
         help="Output results as JSON (for pipeline integration)",
+    )
+
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=0.0,
+        metavar="SECONDS",
+        help="Delay between requests in seconds (default: 0, no delay)",
+    )
+
+    parser.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Verify actual cache poisoning persists (WARNING: affects shared cache)",
     )
 
     return parser
@@ -666,6 +681,29 @@ def main() -> int:
     if args.all:
         args.wcd = True
         args.fat_get = True
+
+    # Determine output mode first (needed for confirm warning)
+    if args.json:
+        mode = OutputMode.JSON
+    elif args.quiet:
+        mode = OutputMode.QUIET
+    else:
+        mode = OutputMode.NORMAL
+
+    # Create output handler early for warnings
+    out = Output(mode, args.verbose)
+
+    # Display warning if confirm mode enabled
+    if args.confirm:
+        out.warning("CONFIRM MODE ENABLED")
+        out.warning("This will affect shared caches and may serve poisoned responses to real users.")
+        out.warning("Only use on targets you have permission to test.")
+
+    # Configure rate limiting if delay specified
+    if args.delay > 0:
+        from venom_cache.rate_limiter import configure_rate_limiter
+
+        configure_rate_limiter(args.delay)
 
     # Determine output mode
     if args.json:
