@@ -814,3 +814,68 @@ class TestFindingOutputBehavior:
 
         assert "[LOW]" in output
         assert "Header Reflection" in output
+
+
+class TestDelayCLI:
+    """Tests for --delay flag.
+
+    SAFE-03 (canary values) is already implemented via generate_canary() in
+    header_prober.py. This class focuses on SAFE-05 (rate limiting via --delay).
+    """
+
+    def test_delay_default(self):
+        """Default delay should be 0.0 (no rate limiting)."""
+        parser = build_parser()
+        args = parser.parse_args(["https://example.com"])
+        assert args.delay == 0.0
+
+    def test_delay_custom(self):
+        """Custom delay should be parsed as float."""
+        parser = build_parser()
+        args = parser.parse_args(["--delay", "0.5", "https://example.com"])
+        assert args.delay == 0.5
+
+    def test_delay_integer(self):
+        """Integer delay should be accepted and parsed as float."""
+        parser = build_parser()
+        args = parser.parse_args(["--delay", "2", "https://example.com"])
+        assert args.delay == 2.0
+
+    def test_delay_small_value(self):
+        """Small delay values should be accepted."""
+        parser = build_parser()
+        args = parser.parse_args(["--delay", "0.1", "https://example.com"])
+        assert args.delay == 0.1
+
+    def test_delay_large_value(self):
+        """Large delay values should be accepted."""
+        parser = build_parser()
+        args = parser.parse_args(["--delay", "10.0", "https://example.com"])
+        assert args.delay == 10.0
+
+    def test_delay_invalid_raises(self):
+        """Non-numeric delay should cause parser error."""
+        parser = build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--delay", "not-a-number", "https://example.com"])
+
+    def test_delay_in_help(self):
+        """Help text should document the delay flag."""
+        parser = build_parser()
+        help_text = parser.format_help()
+        assert "--delay" in help_text
+        assert "SECONDS" in help_text
+        assert "Delay between requests" in help_text
+
+    def test_delay_with_other_flags(self):
+        """Delay should work alongside other flags."""
+        parser = build_parser()
+        args = parser.parse_args([
+            "--delay", "1.0",
+            "--timeout", "30",
+            "-v",
+            "https://example.com",
+        ])
+        assert args.delay == 1.0
+        assert args.timeout == 30.0
+        assert args.verbose == 1
