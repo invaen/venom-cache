@@ -6,6 +6,7 @@ import ssl
 import sys
 
 from venom_cache.cache_buster import verify_cache_buster_isolation
+from venom_cache.cache_detector import detect_cache_headers, get_cache_info
 from venom_cache.http_transport import make_request
 
 
@@ -92,9 +93,20 @@ def main() -> int:
         )
 
         print(f"Status: {status}")
+
+        # Detect and display cache status
+        cache_status = detect_cache_headers(headers)
+        print(get_cache_info(headers))
+
         print(f"Response size: {len(body)} bytes")
 
         if args.verbose >= 1:
+            # Show cache evidence
+            if cache_status.evidence:
+                print("\nCache evidence:")
+                for ev in cache_status.evidence:
+                    print(f"  {ev}")
+
             print("\nResponse headers:")
             for name, value in headers.items():
                 print(f"  {name}: {value}")
