@@ -209,6 +209,19 @@ Examples:
         help="Custom header wordlist file (default: built-in)",
     )
 
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Quiet mode - show only vulnerability findings",
+    )
+
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="JSON output mode (machine-readable)",
+    )
+
     return parser
 
 
