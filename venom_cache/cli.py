@@ -5,6 +5,7 @@ import socket
 import ssl
 import sys
 
+from venom_cache.baseline import check_response_stability
 from venom_cache.cache_buster import verify_cache_buster_isolation
 from venom_cache.cache_detector import detect_cache_headers, get_cache_info
 from venom_cache.http_transport import make_request
@@ -86,19 +87,29 @@ def main() -> int:
     print(f"\nScanning {args.url}...")
 
     try:
-        status, headers, body = make_request(
+        # Establish baseline and check response stability
+        baseline, diff, is_stable = check_response_stability(
             args.url,
             timeout=args.timeout,
             insecure=args.insecure,
         )
 
-        print(f"Status: {status}")
+        print(f"Status: {baseline.status}")
 
         # Detect and display cache status
-        cache_status = detect_cache_headers(headers)
-        print(get_cache_info(headers))
+        cache_status = detect_cache_headers(baseline.headers)
+        print(get_cache_info(baseline.headers))
 
-        print(f"Response size: {len(body)} bytes")
+        print(f"Response size: {baseline.body_length} bytes")
+
+        # Report baseline info
+        print(f"\nBaseline established ({baseline.body_length} bytes, sha256:{baseline.body_hash}...)")
+
+        if is_stable:
+            print("Response stability: Stable (no significant changes between requests)")
+        else:
+            print("WARNING: Response unstable - content changes between requests")
+            print("This may cause false positives during poisoning detection")
 
         if args.verbose >= 1:
             # Show cache evidence
@@ -107,8 +118,18 @@ def main() -> int:
                 for ev in cache_status.evidence:
                     print(f"  {ev}")
 
+            # Show response comparison details
+            print("\nResponse comparison:")
+            print(f"  Status: {'changed' if diff.status_changed else 'unchanged'} ({baseline.status})")
+            if diff.headers_changed:
+                print(f"  Headers changed: {', '.join(diff.headers_changed)}")
+            else:
+                print("  Headers: no significant changes")
+            print(f"  Body: {baseline.body_length} -> {baseline.body_length + diff.content_length_delta} bytes ({diff.content_length_delta:+d})")
+            print(f"  Static content: {'changed' if diff.static_body_changed else 'identical'}")
+
             print("\nResponse headers:")
-            for name, value in headers.items():
+            for name, value in baseline.headers.items():
                 print(f"  {name}: {value}")
 
         return 0
