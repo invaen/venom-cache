@@ -10,7 +10,8 @@ from venom_cache.cache_buster import verify_cache_buster_isolation
 from venom_cache.cache_detector import detect_cache_headers, get_cache_info
 from venom_cache.header_prober import probe_headers
 from venom_cache.http_transport import make_request
-from venom_cache.wordlists import get_header_wordlist
+from venom_cache.param_prober import probe_params
+from venom_cache.wordlists import get_header_wordlist, get_param_wordlist
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -170,8 +171,59 @@ def main() -> int:
         else:
             print("\n[+] No header reflection detected")
 
-        # Summary
-        print(f"\nSummary: {len(findings)} headers tested, {len(reflected)} reflected, {len(significant)} potentially vulnerable")
+        # Summary for headers
+        print(f"\nHeader summary: {len(findings)} headers tested, {len(reflected)} reflected, {len(significant)} potentially vulnerable")
+
+        # Parameter poisoning scan
+        param_wordlist = get_param_wordlist()
+        print(f"\nProbing {len(param_wordlist)} parameters for reflection...")
+
+        param_findings = probe_params(
+            args.url,
+            param_wordlist,
+            timeout=args.timeout,
+            insecure=args.insecure,
+            baseline=baseline,
+        )
+
+        # Categorize parameter findings
+        param_significant = [f for f in param_findings if f.is_significant]
+        param_reflected = [f for f in param_findings if f.reflected_in_body or f.reflected_in_headers]
+
+        # Report parameter findings
+        if param_significant:
+            print(f"\n[!] {len(param_significant)} POTENTIALLY VULNERABLE parameters found:")
+            for f in param_significant:
+                loc = []
+                if f.reflected_in_body:
+                    loc.append("body")
+                if f.reflected_in_headers:
+                    loc.append(f"headers({', '.join(f.reflected_in_headers)})")
+                print(f"    {f.param_name} -> reflected in {', '.join(loc)}")
+                if args.verbose >= 1:
+                    print(f"        Canary: {f.canary}")
+        elif param_reflected:
+            print(f"\n[*] {len(param_reflected)} parameters reflected (no significant diff):")
+            for f in param_reflected:
+                loc = []
+                if f.reflected_in_body:
+                    loc.append("body")
+                if f.reflected_in_headers:
+                    loc.append(f"headers({', '.join(f.reflected_in_headers)})")
+                print(f"    {f.param_name} -> {', '.join(loc)}")
+        else:
+            print("\n[+] No parameter reflection detected")
+
+        # Summary for parameters
+        print(f"\nParameter summary: {len(param_findings)} parameters tested, {len(param_reflected)} reflected, {len(param_significant)} potentially vulnerable")
+
+        # Overall summary
+        total_significant = len(significant) + len(param_significant)
+        total_reflected = len(reflected) + len(param_reflected)
+        print(f"\n--- Overall ---")
+        print(f"Total probes: {len(findings)} headers + {len(param_findings)} parameters = {len(findings) + len(param_findings)}")
+        print(f"Reflected: {total_reflected} ({len(reflected)} headers, {len(param_reflected)} parameters)")
+        print(f"Potentially vulnerable: {total_significant} ({len(significant)} headers, {len(param_significant)} parameters)")
 
         if args.verbose >= 1:
             print("\nResponse headers:")
