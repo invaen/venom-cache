@@ -13,6 +13,7 @@ from venom_cache.cli import (
     get_target_urls,
     parse_cookie,
     parse_header,
+    validate_wordlist_path,
 )
 
 
@@ -346,3 +347,57 @@ class TestHeaderAndCookieCLI:
         parser = build_parser()
         args = parser.parse_args(["https://example.com"])
         assert args.cookies == []
+
+
+class TestValidateWordlistPath:
+    """Tests for validate_wordlist_path() type converter."""
+
+    def test_wordlist_validates_existing_file(self, tmp_path):
+        """Valid file path should be accepted."""
+        wordlist_file = tmp_path / "headers.txt"
+        wordlist_file.write_text("X-Test\n")
+        result = validate_wordlist_path(str(wordlist_file))
+        assert result == str(wordlist_file)
+
+    def test_wordlist_nonexistent_raises(self):
+        """Missing file should raise ArgumentTypeError."""
+        with pytest.raises(argparse.ArgumentTypeError) as exc_info:
+            validate_wordlist_path("/nonexistent/wordlist.txt")
+        assert "Wordlist not found" in str(exc_info.value)
+
+    def test_wordlist_directory_raises(self, tmp_path):
+        """Directory path should raise ArgumentTypeError."""
+        with pytest.raises(argparse.ArgumentTypeError) as exc_info:
+            validate_wordlist_path(str(tmp_path))
+        assert "Not a file" in str(exc_info.value)
+
+
+class TestWordlistCLI:
+    """Tests for CLI wordlist argument integration."""
+
+    def test_wordlist_argument_in_help(self):
+        """The -w/--wordlist flag should appear in help."""
+        parser = build_parser()
+        help_text = parser.format_help()
+        assert "-w FILE" in help_text or "--wordlist FILE" in help_text
+        assert "Custom header wordlist" in help_text
+
+    def test_wordlist_argument_accepts_valid(self, tmp_path):
+        """Valid wordlist file should be accepted."""
+        wordlist_file = tmp_path / "headers.txt"
+        wordlist_file.write_text("X-Test\n")
+        parser = build_parser()
+        args = parser.parse_args(["-w", str(wordlist_file), "https://example.com"])
+        assert args.wordlist == str(wordlist_file)
+
+    def test_wordlist_argument_validates(self):
+        """Invalid wordlist path should cause parser error."""
+        parser = build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["-w", "/nonexistent.txt", "https://example.com"])
+
+    def test_wordlist_default_is_none(self):
+        """Default wordlist should be None (use built-in)."""
+        parser = build_parser()
+        args = parser.parse_args(["https://example.com"])
+        assert args.wordlist is None
