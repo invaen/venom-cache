@@ -322,6 +322,8 @@ def scan_url(
 
         # Report baseline info
         out.info(f"\nBaseline established ({baseline.body_length} bytes, sha256:{baseline.body_hash}...)")
+        out.debug(f"Baseline hash: {baseline.body_hash[:16]}...", level=1)
+        out.debug(f"Baseline headers: {len(baseline.headers)} headers", level=2)
 
         if is_stable:
             out.info("Response stability: Stable (no significant changes between requests)")
@@ -349,6 +351,7 @@ def scan_url(
         # Header poisoning scan
         wordlist = get_header_wordlist_with_custom(args.wordlist)
         out.info(f"\nProbing {len(wordlist)} headers for reflection...")
+        out.debug(f"Header wordlist: {len(wordlist)} headers to probe", level=1)
 
         findings = probe_headers(
             url,
@@ -362,6 +365,9 @@ def scan_url(
         # Categorize findings
         significant = [f for f in findings if f.is_significant]
         reflected = [f for f in findings if f.reflected_in_body or f.reflected_in_headers]
+        out.debug(f"Header probe results: {len(reflected)} reflected, {len(significant)} significant", level=1)
+        for f in reflected:
+            out.debug(f"  {f.header_name}: canary={f.canary[:8]}..., body={f.reflected_in_body}, headers={f.reflected_in_headers}", level=2)
 
         # Collect findings for JSON output (only reflected/significant ones)
         for f in reflected:
@@ -406,6 +412,7 @@ def scan_url(
         # Parameter poisoning scan
         param_wordlist = get_param_wordlist()
         out.info(f"\nProbing {len(param_wordlist)} parameters for reflection...")
+        out.debug(f"Parameter wordlist: {len(param_wordlist)} params to probe", level=1)
 
         param_findings = probe_params(
             url,
@@ -419,6 +426,7 @@ def scan_url(
         # Categorize parameter findings
         param_significant = [f for f in param_findings if f.is_significant]
         param_reflected = [f for f in param_findings if f.reflected_in_body or f.reflected_in_headers]
+        out.debug(f"Param probe results: {len(param_reflected)} reflected, {len(param_significant)} significant", level=1)
 
         # Collect findings for JSON output
         for f in param_reflected:
@@ -468,6 +476,7 @@ def scan_url(
             fat_get_params = get_fat_get_params()
             method_override_headers = get_method_override_headers()
             out.info(f"\nProbing {len(fat_get_params)} body parameters for fat GET...")
+            out.debug(f"Fat GET: testing {len(fat_get_params)} params with {len(method_override_headers)} method override headers", level=1)
 
             fat_get_findings = probe_all_fat_get(
                 url,
@@ -482,6 +491,7 @@ def scan_url(
             # Categorize fat GET findings
             fat_get_significant = [f for f in fat_get_findings if f.is_significant]
             fat_get_reflected = [f for f in fat_get_findings if f.reflected_in_body or f.reflected_in_headers]
+            out.debug(f"Fat GET results: {len(fat_get_reflected)} reflected, {len(fat_get_significant)} significant", level=1)
 
             # Collect findings for JSON output
             for f in fat_get_reflected:
@@ -539,6 +549,7 @@ def scan_url(
             extensions = get_static_extensions()
             total_combos = len(delimiters) * len(extensions)
             out.info(f"\nProbing {total_combos} path confusion combinations for WCD...")
+            out.debug(f"WCD: testing {len(delimiters)} delimiters x {len(extensions)} extensions", level=1)
 
             wcd_findings = probe_wcd(
                 url,
@@ -553,6 +564,7 @@ def scan_url(
             # Categorize WCD findings
             wcd_significant = [f for f in wcd_findings if f.is_significant]
             wcd_cached = [f for f in wcd_findings if f.second_request_hit]
+            out.debug(f"WCD results: {len(wcd_cached)} cached, {len(wcd_significant)} significant", level=1)
 
             # Collect findings for JSON output (only cached/significant ones)
             for f in wcd_cached:
