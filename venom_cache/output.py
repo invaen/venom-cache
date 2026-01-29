@@ -279,3 +279,138 @@ class Output:
         if extra:
             for key, value in extra.items():
                 print(f"    {key}: {value}")
+
+    def warning(self, message: str) -> None:
+        """Print warning message to stderr.
+
+        Skipped in JSON mode (errors still print).
+
+        Args:
+            message: The warning message to print.
+        """
+        if self.mode == OutputMode.JSON:
+            return
+        colored_msg = self.color(f"WARNING: {message}", "33") if self._color_enabled else f"WARNING: {message}"
+        print(colored_msg, file=sys.stderr)
+
+    def set_metadata(
+        self,
+        url: str,
+        tool: str = "venom-cache",
+        version: str = "0.1.0",
+    ) -> None:
+        """Set scan metadata for JSON output.
+
+        Args:
+            url: The target URL being scanned.
+            tool: Tool name (default: venom-cache).
+            version: Tool version (default: 0.1.0).
+        """
+        self._metadata = {
+            "tool": tool,
+            "version": version,
+            "target_url": url,
+            "scan_started": datetime.fromtimestamp(
+                self._start_time, tz=timezone.utc
+            ).isoformat(),
+        }
+
+    def add_finding(self, finding: Any, finding_type: str) -> None:
+        """Add a finding to the collection for JSON output.
+
+        Args:
+            finding: A dataclass finding object (HeaderFinding, ParamFinding, etc.)
+            finding_type: Type tag (header_poisoning, parameter_poisoning, fat_get, web_cache_deception)
+        """
+        finding_dict = finding_to_dict(finding)
+        finding_dict["finding_type"] = finding_type
+        finding_dict["severity"] = _finding_severity(finding_type, finding)
+        self._findings.append(finding_dict)
+
+    def finalize(self) -> None:
+        """Finalize output and print JSON if in JSON mode.
+
+        In JSON mode, prints the complete JSON output to stdout.
+        In other modes, does nothing.
+        """
+        if self.mode != OutputMode.JSON:
+            return
+
+        end_time = time.time()
+        duration = end_time - self._start_time
+
+        # Build summary
+        summary = {
+            "total_findings": len(self._findings),
+            "findings_by_type": {},
+            "findings_by_severity": {},
+        }
+
+        for f in self._findings:
+            ftype = f.get("finding_type", "unknown")
+            summary["findings_by_type"][ftype] = summary["findings_by_type"].get(ftype, 0) + 1
+            sev = f.get("severity", "info")
+            summary["findings_by_severity"][sev] = summary["findings_by_severity"].get(sev, 0) + 1
+
+        # Update metadata with scan completion
+        self._metadata["scan_completed"] = datetime.fromtimestamp(
+            end_time, tz=timezone.utc
+        ).isoformat()
+        self._metadata["scan_duration_seconds"] = round(duration, 2)
+
+        output = {
+            "metadata": self._metadata,
+            "summary": summary,
+            "findings": self._findings,
+        }
+
+        print(json.dumps(output, indent=2))
+
+
+def finding_to_dict(finding: Any) -> dict:
+    """Convert a finding dataclass to a JSON-serializable dict.
+
+    Handles nested dataclasses like ResponseDiff.
+
+    Args:
+        finding: A dataclass finding object.
+
+    Returns:
+        Dictionary representation of the finding.
+    """
+    if not is_dataclass(finding):
+        return {"raw": str(finding)}
+
+    result = {}
+    for key, value in asdict(finding).items():
+        # Skip response_diff as it's verbose and contains computed fields
+        if key == "response_diff":
+            # Include only the significant flag from response_diff
+            if is_dataclass(value):
+                result["response_significant"] = value.get("significant", False) if isinstance(value, dict) else getattr(value, "significant", False)
+            elif isinstance(value, dict):
+                result["response_significant"] = value.get("significant", False)
+            continue
+        result[key] = value
+    return result
+
+
+def _finding_severity(finding_type: str, finding: Any) -> str:
+    """Determine severity level for a finding.
+
+    Args:
+        finding_type: Type of finding.
+        finding: The finding object.
+
+    Returns:
+        Severity string: info, low, medium, high, critical.
+    """
+    # Check if finding is significant
+    is_significant = getattr(finding, "is_significant", False)
+
+    if finding_type == "web_cache_deception":
+        return "high" if is_significant else "info"
+    elif finding_type in ("header_poisoning", "parameter_poisoning", "fat_get"):
+        return "medium" if is_significant else "info"
+    else:
+        return "info"
