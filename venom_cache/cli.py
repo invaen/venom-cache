@@ -220,6 +220,14 @@ Examples:
     )
 
     parser.add_argument(
+        "-A",
+        "--user-agent",
+        metavar="UA",
+        default=None,
+        help="Custom User-Agent string (default: Python http.client)",
+    )
+
+    parser.add_argument(
         "-q",
         "--quiet",
         action="store_true",
@@ -755,8 +763,10 @@ def main() -> int:
 
         configure_rate_limiter(args.delay)
 
-    # Build custom headers from -H and -c flags
+    # Build custom headers from -H, -c, and -A flags
     custom_headers = build_request_headers(args.headers, args.cookies)
+    if args.user_agent:
+        custom_headers["User-Agent"] = args.user_agent
 
     # Get target URLs from either positional arg or file
     try:
