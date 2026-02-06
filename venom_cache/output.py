@@ -297,15 +297,19 @@ class Output:
         self,
         url: str,
         tool: str = "venom-cache",
-        version: str = "0.1.0",
+        version: Optional[str] = None,
     ) -> None:
         """Set scan metadata for JSON output.
 
         Args:
             url: The target URL being scanned.
             tool: Tool name (default: venom-cache).
-            version: Tool version (default: 0.1.0).
+            version: Tool version (default: from __init__.__version__).
         """
+        if version is None:
+            from venom_cache import __version__
+
+            version = __version__
         self._metadata = {
             "tool": tool,
             "version": version,

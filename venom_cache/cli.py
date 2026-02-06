@@ -7,6 +7,7 @@ import ssl
 import sys
 from typing import Tuple
 
+from venom_cache import __version__
 from venom_cache.baseline import check_response_stability
 from venom_cache.cache_buster import verify_cache_buster_isolation
 from venom_cache.cache_detector import detect_cache_headers, get_cache_info
@@ -125,6 +126,13 @@ Examples:
   %(prog)s -f urls.txt
   cat urls.txt | %(prog)s -f -
         """,
+    )
+
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
 
     parser.add_argument(
