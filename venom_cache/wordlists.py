@@ -56,6 +56,24 @@ UNKEYED_HEADERS: List[str] = [
     "X-Akamai-Config",
     "X-Fastly-Debug",
     "X-Varnish-Debug",
+    # Cloud provider / edge headers
+    "X-Amz-Cf-Id",
+    "X-Amz-Website-Redirect-Location",
+    "X-Azure-Ref",
+    "X-Azure-RequestChain",
+    "X-Vercel-Id",
+    "X-Vercel-Forwarded-For",
+    "X-Bunny-Rewriter-Token",
+    "CDN-Loop",
+    # Content negotiation
+    "X-Requested-With",
+    "X-Pjax",
+    "X-Turbolinks-Referrer",
+    # Miscellaneous unkeyed
+    "X-Forwarded-Path",
+    "X-Invoke-Output",
+    "X-Original-Forwarded-For",
+    "X-ProxyUser-Ip",
 ]
 
 
@@ -91,12 +109,20 @@ UNKEYED_PARAMS: List[str] = [
     "mc_cid",
     "mc_eid",
     "mkt_tok",
+    # TikTok / Bing / LinkedIn tracking
+    "ttclid",
+    "msclkid",
+    "li_fat_id",
+    "twclid",
     # Other analytics/tracking
     "epik",
     "_ke",
     "ck_subscriber_id",
     "campaignid",
     "adgroupid",
+    "hsa_acc",
+    "hsa_cam",
+    "hsa_grp",
     # JSONP callback parameters
     "callback",
     "jsonp",
