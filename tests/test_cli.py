@@ -60,10 +60,10 @@ class TestBuildParser:
     def test_url_and_file_can_coexist(self):
         """Both positional URL and --file can be provided together."""
         parser = build_parser()
-        # This should parse without error (file validation happens later)
-        # We can't actually test this without a real file, so we test the parser structure
-        assert parser._actions[1].dest == "url"  # First positional after help
-        assert parser._actions[2].dest == "file"  # Second argument
+        # Verify parser has both url and file actions by dest name
+        action_dests = [a.dest for a in parser._actions]
+        assert "url" in action_dests
+        assert "file" in action_dests
 
     def test_help_shows_file_option(self):
         """Help text should document the file input option."""

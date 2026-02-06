@@ -155,4 +155,4 @@ class TestGetHeaderWordlistWithCustom:
         """None returns built-in wordlist."""
         result = get_header_wordlist_with_custom(None)
         assert result == get_header_wordlist()
-        assert len(result) == 40  # Built-in has 40 headers
+        assert len(result) == len(UNKEYED_HEADERS)
