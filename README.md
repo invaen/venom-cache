@@ -231,9 +231,11 @@ X-Debug-Mode
 
 | Flag | Description |
 |------|-------------|
+| `-V, --version` | Show version and exit |
 | `-f, --file FILE` | Read URLs from file (use `-` for stdin) |
 | `-H, --header HDR` | Add custom header (repeatable) |
 | `-c, --cookie COOKIE` | Add cookie (repeatable) |
+| `-A, --user-agent UA` | Custom User-Agent string |
 | `-w, --wordlist FILE` | Custom header wordlist |
 | `--fat-get` | Test fat GET poisoning |
 | `--wcd` | Test web cache deception |
