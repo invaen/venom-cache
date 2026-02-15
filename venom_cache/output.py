@@ -128,7 +128,7 @@ class Output:
             # Enable virtual terminal processing (0x0004)
             kernel32.SetConsoleMode(handle, mode.value | 0x0004)
             return True
-        except Exception:
+        except (OSError, ValueError, AttributeError):
             return False
 
     @property

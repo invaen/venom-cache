@@ -130,7 +130,7 @@ class TargetConnection:
         if self._conn is not None:
             try:
                 self._conn.close()
-            except Exception:
+            except (OSError, http.client.HTTPException):
                 pass
             self._conn = None
 

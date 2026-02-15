@@ -1,6 +1,7 @@
 """Cache buster generation and verification for safe cache probing."""
 
 import hashlib
+import http.client
 import random
 import string
 from typing import Tuple
@@ -119,5 +120,5 @@ def verify_cache_buster_isolation(
         # All unique - no caching detected, still safe
         return (True, "Cache buster isolation verified - no caching detected")
 
-    except Exception as e:
+    except (OSError, http.client.HTTPException, ValueError) as e:
         return (False, f"Verification failed: {e}")
