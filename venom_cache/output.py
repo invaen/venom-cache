@@ -389,11 +389,11 @@ def finding_to_dict(finding: Any) -> dict:
     for key, value in asdict(finding).items():
         # Skip response_diff as it's verbose and contains computed fields
         if key == "response_diff":
-            # Include only the significant flag from response_diff
-            if is_dataclass(value):
-                result["response_significant"] = value.get("significant", False) if isinstance(value, dict) else getattr(value, "significant", False)
-            elif isinstance(value, dict):
+            # asdict() converts nested dataclasses to dicts, so check dict
+            if isinstance(value, dict):
                 result["response_significant"] = value.get("significant", False)
+            else:
+                result["response_significant"] = False
             continue
         result[key] = value
     return result
