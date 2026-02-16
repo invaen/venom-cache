@@ -84,13 +84,15 @@ def verify_cache_buster_isolation(
         cb1 = generate_cache_buster()
         cb2 = generate_cache_buster()
 
-        # Build URLs with specific cache busters
-        url1 = inject_cache_buster(url, "_cb")
-        # Replace the generated cache buster with our known cb1
-        url1 = url1.rsplit("=", 1)[0] + "=" + cb1
+        # Build URLs with specific cache busters using proper URL parsing
+        parsed = urlparse(url)
+        query_params = parse_qs(parsed.query, keep_blank_values=True)
 
-        url2 = inject_cache_buster(url, "_cb")
-        url2 = url2.rsplit("=", 1)[0] + "=" + cb2
+        query_params["_cb"] = [cb1]
+        url1 = urlunparse(parsed._replace(query=urlencode(query_params, doseq=True)))
+
+        query_params["_cb"] = [cb2]
+        url2 = urlunparse(parsed._replace(query=urlencode(query_params, doseq=True)))
 
         # Request 1: cb1
         _, _, body1 = make_request(url1, timeout=timeout, insecure=insecure, use_cache_buster=False, headers=headers)
